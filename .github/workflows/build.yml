@@ -95,7 +95,7 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install Claude Code + pkg
+      - name: Install Claude Code
         run: |
           $VERSION = "${{ github.event.inputs.claude_version }}"
           if ($VERSION -eq "") {
@@ -103,14 +103,18 @@ jobs:
           } else {
             npm install -g "@anthropic-ai/claude-code@$VERSION"
           }
-          npm install -g @yao-pkg/pkg
           claude --version
 
-      - name: Bundle
+      - name: Extract native binary
         run: |
+          # claude-code ships bin/claude.exe as an already-bundled native Windows
+          # PE binary. Bundling it again with pkg breaks it. Just copy it.
           $CLAUDE_DIR = "$(npm root -g)\@anthropic-ai\claude-code"
-          Write-Host "Entry dir: $CLAUDE_DIR"
-          pkg "$CLAUDE_DIR" --targets node20-win-x64 --output claude-pwm-windows.exe --compress GZip
+          Write-Host "Package dir: $CLAUDE_DIR"
+          $SRC = "$CLAUDE_DIR\bin\claude.exe"
+          Write-Host "Source: $SRC"
+          Copy-Item $SRC "claude-pwm-windows.exe"
+          Write-Host "Size: $((Get-Item 'claude-pwm-windows.exe').Length) bytes"
 
       - uses: actions/upload-artifact@v4
         with:
