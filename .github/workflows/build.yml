@@ -19,9 +19,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
 
-      - name: Install Claude Code
+      - name: Install Claude Code + pkg
         run: |
           VERSION="${{ github.event.inputs.claude_version }}"
           if [ -z "$VERSION" ]; then
@@ -29,20 +29,19 @@ jobs:
           else
             npm install -g @anthropic-ai/claude-code@$VERSION
           fi
+          npm install -g @yao-pkg/pkg
           claude --version
 
-      - name: Bundle with pkg
+      - name: Bundle
         run: |
-          npm install -g @vercel/pkg
-          CLAUDE_BIN=$(which claude)
-          CLAUDE_JS=$(node -e "require.resolve('@anthropic-ai/claude-code')" 2>/dev/null || echo "")
-          # Find the actual entry JS file
-          CLAUDE_PKG=$(npm root -g)/@anthropic-ai/claude-code
-          echo "Package dir: $CLAUDE_PKG"
-          ls $CLAUDE_PKG/
-          # Use pkg to bundle with node18 (LTS)
-          pkg "$CLAUDE_PKG" --targets node18-linux-x64 --output claude-pwm-linux --compress GZip || \
-          pkg "$CLAUDE_BIN" --targets node18-linux-x64 --output claude-pwm-linux --compress GZip
+          CLAUDE_DIR=$(npm root -g)/@anthropic-ai/claude-code
+          CLAUDE_ENTRY="$CLAUDE_DIR/bin/claude.exe"
+          echo "Entry: $CLAUDE_ENTRY"
+          # pkg needs a package.json with bin field; the npm package provides it
+          pkg "$CLAUDE_DIR" \
+            --targets node20-linux-x64 \
+            --output claude-pwm-linux \
+            --compress GZip
 
       - uses: actions/upload-artifact@v4
         with:
@@ -58,9 +57,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
 
-      - name: Install Claude Code
+      - name: Install Claude Code + pkg
         run: |
           VERSION="${{ github.event.inputs.claude_version }}"
           if [ -z "$VERSION" ]; then
@@ -68,17 +67,17 @@ jobs:
           else
             npm install -g @anthropic-ai/claude-code@$VERSION
           fi
+          npm install -g @yao-pkg/pkg
           claude --version
 
-      - name: Bundle with pkg
+      - name: Bundle
         run: |
-          npm install -g @vercel/pkg
-          CLAUDE_BIN=$(which claude)
-          CLAUDE_PKG=$(npm root -g)/@anthropic-ai/claude-code
-          echo "Package dir: $CLAUDE_PKG"
-          ls $CLAUDE_PKG/
-          pkg "$CLAUDE_PKG" --targets node18-macos-arm64 --output claude-pwm-macos --compress GZip || \
-          pkg "$CLAUDE_BIN" --targets node18-macos-arm64 --output claude-pwm-macos --compress GZip
+          CLAUDE_DIR=$(npm root -g)/@anthropic-ai/claude-code
+          echo "Entry dir: $CLAUDE_DIR"
+          pkg "$CLAUDE_DIR" \
+            --targets node20-macos-arm64 \
+            --output claude-pwm-macos \
+            --compress GZip
 
       - uses: actions/upload-artifact@v4
         with:
@@ -94,9 +93,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
 
-      - name: Install Claude Code
+      - name: Install Claude Code + pkg
         run: |
           $VERSION = "${{ github.event.inputs.claude_version }}"
           if ($VERSION -eq "") {
@@ -104,15 +103,14 @@ jobs:
           } else {
             npm install -g "@anthropic-ai/claude-code@$VERSION"
           }
+          npm install -g @yao-pkg/pkg
           claude --version
 
-      - name: Bundle with pkg
+      - name: Bundle
         run: |
-          npm install -g @vercel/pkg
-          $CLAUDE_PKG = "$(npm root -g)\@anthropic-ai\claude-code"
-          Write-Host "Package dir: $CLAUDE_PKG"
-          Get-ChildItem $CLAUDE_PKG
-          pkg "$CLAUDE_PKG" --targets node18-win-x64 --output claude-pwm-windows.exe --compress GZip
+          $CLAUDE_DIR = "$(npm root -g)\@anthropic-ai\claude-code"
+          Write-Host "Entry dir: $CLAUDE_DIR"
+          pkg "$CLAUDE_DIR" --targets node20-win-x64 --output claude-pwm-windows.exe --compress GZip
 
       - uses: actions/upload-artifact@v4
         with:
@@ -129,6 +127,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - uses: actions/download-artifact@v4
         with:
           name: claude-pwm-linux
@@ -141,13 +143,7 @@ jobs:
 
       - name: Get Claude version
         id: ver
-        run: |
-          npm show @anthropic-ai/claude-code version > /tmp/cv.txt
-          echo "claude=$(cat /tmp/cv.txt)" >> $GITHUB_OUTPUT
-
-      - name: Get short SHA
-        id: sha
-        run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        run: echo "claude=$(npm show @anthropic-ai/claude-code version)" >> $GITHUB_OUTPUT
 
       - uses: softprops/action-gh-release@v2
         with:
@@ -159,39 +155,26 @@ jobs:
             Packages `@anthropic-ai/claude-code@${{ steps.ver.outputs.claude }}` with Node.js built-in.
             **No Node.js installation required.**
 
-            Claude Code natively supports `ANTHROPIC_BASE_URL` — point it at the PWM exchange
-            exactly like the official docs describe.
-
             ### macOS (Apple Silicon)
             ```bash
             curl -L https://github.com/integritynoble/claude-pwm/releases/latest/download/claude-pwm-macos \
-              -o /usr/local/bin/claude-pwm
-            chmod +x /usr/local/bin/claude-pwm
-            xattr -d com.apple.quarantine /usr/local/bin/claude-pwm  # if Gatekeeper blocks it
+              -o /usr/local/bin/claude-pwm && chmod +x /usr/local/bin/claude-pwm
+            xattr -d com.apple.quarantine /usr/local/bin/claude-pwm  # if Gatekeeper blocks
             ```
 
             ### Linux (x86_64)
             ```bash
             curl -L https://github.com/integritynoble/claude-pwm/releases/latest/download/claude-pwm-linux \
-              -o /usr/local/bin/claude-pwm
-            chmod +x /usr/local/bin/claude-pwm
+              -o /usr/local/bin/claude-pwm && chmod +x /usr/local/bin/claude-pwm
             ```
 
             ### Windows (x86_64)
-            Download [claude-pwm-windows.exe](https://github.com/integritynoble/claude-pwm/releases/latest/download/claude-pwm-windows.exe)
-            and place it somewhere on your PATH.
+            Download [claude-pwm-windows.exe](https://github.com/integritynoble/claude-pwm/releases/latest/download/claude-pwm-windows.exe) and add to PATH.
 
             ### Use with PWM exchange
             ```bash
             export ANTHROPIC_BASE_URL=https://physicsworldmodel.org/api/v1/exchange/anthropic
             export ANTHROPIC_AUTH_TOKEN=pwm_your_key_here
-            claude-pwm
-            ```
-
-            ### Windows (PowerShell)
-            ```powershell
-            $env:ANTHROPIC_BASE_URL = "https://physicsworldmodel.org/api/v1/exchange/anthropic"
-            $env:ANTHROPIC_AUTH_TOKEN = "pwm_your_key_here"
             claude-pwm
             ```
           files: |
