@@ -85,3 +85,38 @@ No code change required in this repo. `claude.platformai.org` is serving
 normally; the transient startup `ConnectError` has cleared. If a user still
 can't chat, it is the **API-key path** (missing key in browser, or an expired
 backing credential on the PWM exchange), not this front-end service.
+
+---
+
+## 2026-06-26 (follow-up) — Placeholder change + end-to-end test
+
+### Key-format correction
+Real exchange keys are **`sk-pwm-...`** (50 chars), not `pwm_...`. Stored
+plaintext in `users.api_key` (DB `pwm_nonprofit`). The earlier file search for
+`pwm_…` found nothing because that wasn't the real prefix.
+
+### UI change (separate repo `Claude_UI_PWM`)
+Settings key-field placeholder updated `pwm_your_key_here` → **`sk-pwm-...`**
+(`static/index.html`). `static/` is baked into the image, so a `docker compose
+up -d --build` of `claude_ui_pwm-app-1` was required. Verified live:
+`https://claude.platformai.org/` now serves `placeholder="sk-pwm-..."` and the
+old hint is gone.
+
+### End-to-end test with a real key — PASS ✅
+Tested the live site using the owner's own `sk-pwm-...` key (pulled from
+`users.api_key` into a shell var, not printed; minimal request, no other user
+billed):
+
+```
+POST https://claude.platformai.org/api/chat/stream
+  Authorization: Bearer sk-pwm-…
+  body: model=claude-sonnet-4-6, "Reply with exactly: PWM test OK"
+→ HTTP 200, proper SSE stream
+→ assistant text: "PWM test OK"
+→ usage: input_tokens=53, output_tokens=7   (PWM billing flowing)
+```
+
+This confirms the **full chain end-to-end**: browser key → `/api/chat/stream`
+→ PWM exchange → Anthropic → streamed back. The exchange's backing
+subscription OAuth credential is currently **live** (not expired). Resolves the
+"not yet confirmed" caveat from the first investigation.
