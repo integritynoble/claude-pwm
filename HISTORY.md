@@ -145,3 +145,32 @@ curl "https://claude.platformai.org/healthz?deep=1"
 So the quick triage for "claude.platformai.org not working" is now:
 `/healthz` 200 → app up; `?deep=1` 200 → upstream reachable; then a real-key
 `POST /api/chat/stream` for full end-to-end.
+
+---
+
+## 2026-06-27 — Uptime watchdog wired in + live self-heal test
+
+`/healthz` is now monitored. Cron watchdog
+`Claude_UI_PWM/scripts/claude_ui_health_watchdog.sh` (commit `92deb4b`) runs
+**every 5 min** on agent-prod (logs `/tmp/pwm_log/claude_ui_watchdog.log`):
+- container down/unreachable → **restart** `claude_ui_pwm-app-1` (immediately if
+  not running; after 2 consecutive misses if up-but-unresponsive),
+- upstream exchange `503 degraded` → **alert only** (a restart can't fix an
+  exchange-side outage),
+- optional `PWM_WEBHOOK_URL` for Slack/Discord push alerts.
+
+### Live self-heal test — PASS ✅
+Stopped the prod container and ran the watchdog:
+
+| Time (UTC) | Event |
+|------------|-------|
+| 13:08:41 | `docker stop claude_ui_pwm-app-1` (simulated crash) |
+| 13:08:42 | `/healthz` → `HTTP 000` (confirmed unreachable) |
+| 13:08:42 | watchdog → `RESTART: container not running` → `RECOVERED: /healthz 200` (exit 0) |
+| 13:09:01 | container `Up 18s`; public `https://claude.platformai.org/` → 200; `?deep=1` → 200 upstream reachable; down-counter reset to 0 |
+
+Total outage ≈ a few seconds — the "container not running" branch restarts
+without waiting for the threshold and re-verifies recovery before exiting.
+Monitoring is proven, not just deployed: a real crash is caught within ≤5 min
+and self-healed the same way. (A `000`-doubling bug in the down-detection was
+found and fixed during testing before the watchdog shipped.)
