@@ -120,3 +120,28 @@ This confirms the **full chain end-to-end**: browser key → `/api/chat/stream`
 → PWM exchange → Anthropic → streamed back. The exchange's backing
 subscription OAuth credential is currently **live** (not expired). Resolves the
 "not yet confirmed" caveat from the first investigation.
+
+---
+
+## 2026-06-26 (follow-up) — `/healthz` endpoint for fast "is it working?" checks
+
+To make future outage reports answerable in one request (the original task was
+"check if it's working"), added a health endpoint to the `Claude_UI_PWM` app
+(`routers/health.py`, registered in `main.py`, tests in `tests/test_health.py`,
+commit `d8af0eb` on `master`). Deployed via `docker compose up -d --build`.
+
+```bash
+# app liveness
+curl https://claude.platformai.org/healthz
+# -> {"status":"ok","service":"claude-ui-pwm"}
+
+# liveness + upstream-exchange reachability (no key needed)
+curl "https://claude.platformai.org/healthz?deep=1"
+# -> {"status":"ok",...,"upstream":{"reachable":true,"status":404}}   when healthy
+# -> 503 {"status":"degraded","upstream":{"reachable":false,"error":"ConnectError"}}  when the
+#    exchange is unreachable (the exact failure mode of the 15:01:50Z startup blip)
+```
+
+So the quick triage for "claude.platformai.org not working" is now:
+`/healthz` 200 → app up; `?deep=1` 200 → upstream reachable; then a real-key
+`POST /api/chat/stream` for full end-to-end.
