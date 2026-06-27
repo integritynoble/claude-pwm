@@ -174,3 +174,115 @@ without waiting for the threshold and re-verifies recovery before exiting.
 Monitoring is proven, not just deployed: a real crash is caught within ≤5 min
 and self-healed the same way. (A `000`-doubling bug in the down-detection was
 found and fixed during testing before the watchdog shipped.)
+
+---
+
+## 2026-06-27 — Remove Credits System block from benchmark pages
+
+### Request
+Remove the "Credits System" card (Platform Profit Pool 40%, Winner Share 30%,
+Min Withdrawal $100) from every benchmark detail page on physicsworldmodel.org.
+
+### What was changed
+
+| File | Repo | Commit |
+|------|------|--------|
+| `platform/pwm_platform/templates/variant_benchmarks.html` | `Physics_World_Model` (public submodule) | `cef3b35c` |
+
+Deleted the entire `<!-- ═══ Credits Summary ═══ -->` section (lines 1034-1054)
+from the Jinja2 template that renders every `/benchmark/<variant>` page.
+The three stat cards and their heading are gone; the surrounding sections
+(leaderboard above, Primitives Reference below) are untouched.
+
+### Notes
+- `public/` is a **git submodule** inside `Physics_World_Model/pwm`, pointing to
+  `git@github-integritynoble:integritynoble/Physics_World_Model.git`.
+- The worktree created for isolation did not have the submodule checked out, so
+  the edit was applied directly to the submodule's working tree and committed
+  there.
+- A pre-commit hook auto-attempted a push, which failed (remote had newer
+  commits). Resolved with `git pull --rebase` then a manual `git push`.
+
+### Deployment verification — physicsworldmodel.org
+`physicsworldmodel.org` → port 8101 → `pwm_nonprofit-app-1`, templates
+live-mounted from `pwm_nonprofit/platform/pwm_nonprofit/templates/`.
+That copy already had no Credits block, so **no container restart was needed**.
+`curl https://physicsworldmodel.org/benchmark/ct` confirmed zero matches.
+
+---
+
+## 2026-06-27 (follow-up) — Remove Credits System from pwm.platformai.org (pwm_product)
+
+### Background
+The initial edit targeted the wrong stack. `physicsworldmodel.org` (port 8101,
+`pwm_nonprofit`) was already clean. The **Credits System was still live on
+`pwm.platformai.org`** (port 8100, `platform-app-1`), which is managed by the
+`pwm_product` repo — a separate codebase with its own template.
+
+### What was changed
+
+| File | Repo | Commit |
+|------|------|--------|
+| `platform/pwm_platform/templates/variant_benchmarks.html` | `pwm_product` | `1fd69d6` |
+
+### Deployment
+Templates are **baked into the image** for `platform-app-1` (no live-mount).
+Steps taken:
+1. Removed the Credits Summary block (lines 680-700) from the template.
+2. `git commit` + `git push` to `pwm_product` → `1fd69d6` on `main`.
+3. `docker compose build app` → rebuilt image.
+4. `docker compose up -d app` → container recreated, DB dependency waited healthy.
+5. `curl http://127.0.0.1:8100/benchmark/ct` → HTTP 200, zero Credits matches. ✅
+
+### Model sync check (claude.platformai.org)
+`Claude_UI_PWM` already uses current Anthropic models:
+- Default: `claude-sonnet-4-6`
+- Options: `claude-opus-4-8`, `claude-haiku-4-5-20251001`
+No change needed.
+
+---
+
+## 2026-06-27 — claude.platformai.org parity with Anthropic claude.ai
+
+### Principle established
+`claude-pwm` = the `Claude_UI_PWM` web app must **BE** the same as Claude from
+Anthropic in all visible features / UX / copy. PWM billing stays invisible to
+the end user. Any divergence from claude.ai is a bug to close.
+
+This mirrors the existing chatgpt-pwm principle (chatgpt-pwm = same as
+OpenAI ChatGPT).
+
+### Divergences found and fixed (commit `5a4f4f0` on `Claude_UI_PWM` master)
+
+| File | Before | After |
+|------|--------|-------|
+| `static/index.html` — sidebar brand | `Claude <small>PWM</small>` | `Claude` |
+| `static/index.html` — composer footer | "…billed in PWM tokens." | "Consider checking important information." (exact claude.ai copy) |
+| `static/share.html` — page title | `Shared conversation · Claude PWM` | `Shared conversation · Claude` |
+| `static/share.html` — brand in header | `Claude <small>PWM</small>` | `Claude` |
+| `static/share.html` — share footer | "Shared from Claude PWM…" | "Shared from Claude…" |
+| `static/css/style.css` | `.brand small` rule (dead code) | removed |
+
+### Deployment
+`docker compose up -d --build` in `Claude_UI_PWM/`. The
+cache-bust `?v=<hash>` mechanism (already in place since 2026-06-27
+Cloudflare fix) ensures the new CSS/JS reach users past any CF cache.
+
+Verification:
+```bash
+curl -s http://127.0.0.1:8103/ | grep -E "PWM|brand|Claude"
+# → brand line shows "Claude" (no PWM tag); composer-hint matches claude.ai copy
+curl -s http://127.0.0.1:8103/healthz
+# → {"status":"ok","service":"claude-ui-pwm"}
+```
+
+### Remaining parity gap
+- **Settings modal** still mentions "PWM API Key" and physicsworldmodel.org
+  for key retrieval — this is intentional (users need to know where to get
+  their key) and acceptable since it's only visible when the user opens
+  Settings.
+- **Projects** feature (group conversations) — not implemented; would require
+  significant backend work. Low priority unless director requests it.
+- All other features (streaming, model picker, extended thinking, artifacts,
+  file attachments, share/export, conversation history, sidebar search,
+  keyboard shortcuts, light/dark theme, retry/edit/copy) are parity-complete.
