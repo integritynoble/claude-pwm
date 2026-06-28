@@ -399,3 +399,42 @@ full Settings UI.
 
 ### Deployment
 `docker compose up -d --build`. Verified: `/healthz` 200, 5 `.settings-tab` elements in served HTML.
+
+---
+
+## 2026-06-28 — Parity audit #2 + mobile sidebar fix
+
+### Audit result
+Second full sweep of all UI surfaces on `claude.comparegpt.io` vs. claude.ai.
+
+| Surface | Status |
+|---------|--------|
+| Landing / greeting / chips | ✅ parity |
+| Dark mode (toggle + persistence) | ✅ parity |
+| Model picker pill (header) | ✅ parity |
+| Composer (attach, Think, model label, send) | ✅ parity |
+| Settings — all 5 tabs | ✅ parity |
+| Artifacts panel | ✅ parity (width:0 + overflow:hidden hides it correctly at rest) |
+| Share / export modal | ✅ parity |
+| Keyboard shortcuts modal | ✅ parity |
+| **Mobile sidebar** | **BUG → FIXED** (see below) |
+| Model picker dropdown style | ⚠️ deferred — native `<select>` vs. claude.ai custom popover; functional gap, large to build |
+| Voice / mic button | ⚠️ deferred — claude.ai Pro has it; requires Web Speech API integration |
+| Sidebar bottom (user avatar) | ⚠️ intentional — claude.ai shows avatar+name; we show Settings button (no user accounts, API-key-only) |
+
+### Bug fixed — mobile sidebar starts open (commit `f81a638`, merged `6d89ede`)
+
+**Root cause:** `loadChat()` had `if (window.innerWidth <= 760) sidebar.classList.add('collapsed')` (line 739), but `startNewChat()` — which runs on page load — did not. On mobile, the sidebar was therefore open by default, covering the main content area.
+
+**Fix:** Added the same one-liner to `startNewChat()` so both initial page load and clicking "New chat" collapse the sidebar on mobile.
+
+```diff
+ function startNewChat() {
+   ...
+   loadConversations();
++  if (window.innerWidth <= 760) sidebar.classList.add('collapsed');
+ }
+```
+
+### Deployment
+`docker compose up -d --build`. Verified via Playwright headless screenshot at 390×844: sidebar class is `collapsed`, hamburger menu visible top-left, full-width content area rendered correctly.
