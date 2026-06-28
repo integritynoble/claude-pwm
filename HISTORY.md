@@ -286,3 +286,36 @@ curl -s http://127.0.0.1:8103/healthz
 - All other features (streaming, model picker, extended thinking, artifacts,
   file attachments, share/export, conversation history, sidebar search,
   keyboard shortcuts, light/dark theme, retry/edit/copy) are parity-complete.
+
+---
+
+## 2026-06-28 — Rich Settings panel (5-section, matches claude.ai)
+
+### Request
+Settings modal was sparse (just name + API key). Expand to match claude.ai's
+full Settings UI.
+
+### What was built (commit `43a8fd2` on `Claude_UI_PWM` master)
+
+**5-section tabbed Settings panel** (720px modal, left nav + content area):
+
+| Section | Content |
+|---------|---------|
+| **Profile** | Display name (with description), PWM API Key (with description + hint) |
+| **Appearance** | Theme cards (System/Light/Dark with visual previews, instant-apply); Message font (Sans-serif / Serif radio, instant-apply) |
+| **Personalization** | Custom instructions toggle + "What would you like Claude to know about you?" + "How would you like Claude to respond?" (1500 char each, char counters, dimmed when off) |
+| **Language** | Response language dropdown (17 languages + Auto-detect) |
+| **Data controls** | Server sync toggle; Clear all conversations (with confirm, clears local + server); Data storage disclosure |
+
+### How custom instructions work end-to-end
+- Stored in localStorage (`claude_pwm_custom_instructions`, `claude_pwm_user_context`, `claude_pwm_user_instructions`)
+- `buildSystemPrompt()` in `app.js` builds a string from them
+- Added as `system` in the chat request body
+- `routers/chat.py` already accepted `body.get("system")` and appended it as block 3 (after the Claude-Code identity + persona blocks)
+- No backend changes to `chat.py` needed — it was already wired
+
+### Backend change
+`routers/conversations.py` gained `_delete_all()` + `DELETE /api/conversations` (bulk delete, authenticated by PWM key hash). Used by the "Clear all conversations" button so the server clears too, not just localStorage.
+
+### Deployment
+`docker compose up -d --build`. Verified: `/healthz` 200, 5 `.settings-tab` elements in served HTML.
