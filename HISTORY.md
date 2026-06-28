@@ -289,6 +289,86 @@ curl -s http://127.0.0.1:8103/healthz
 
 ---
 
+## 2026-06-28 — Production domain claude.comparegpt.io activated
+
+### Domain assignment
+| Domain | Role |
+|--------|------|
+| `claude.comparegpt.io` | **Production** (new public-facing URL) |
+| `claude.platformai.org` | **Development / staging** (unchanged) |
+
+Both proxy to the same container on port 8103 — only the nginx vhost differs.
+
+### What was done
+1. Created `nginx/claude.comparegpt.io.conf` (committed `0f49d83` on `Claude_UI_PWM` master)
+2. Installed config: `sudo cp → /etc/nginx/sites-available/`, symlinked to `sites-enabled/`, `nginx -t` passed
+3. `sudo systemctl reload nginx`
+4. Ran `sudo certbot --nginx -d claude.comparegpt.io` — certificate issued via Let's Encrypt (expires 2026-09-26, auto-renews)
+5. Verified: `GET https://claude.comparegpt.io/healthz` → HTTP 200 `{"status":"ok","service":"claude-ui-pwm"}`
+
+DNS for `claude.comparegpt.io` was already pointing through Cloudflare (resolved to `104.21.42.121`), so HTTP-01 challenge succeeded immediately.
+
+---
+
+## 2026-06-28 — Developer reward wallet confirmed (5% / 10% split already live)
+
+### Request
+"Put 5% PWM consuming into wallet `0xca5bDFbc46A05fEfb70FF2136409501B51B88fA8` for developer reward. 10% to Base (treasury)."
+
+### Finding
+**Already live in production — no code change required.**
+
+| Share | % | Config location |
+|-------|---|----------------|
+| Provider | 85% | `DEFAULT_EXCHANGE_PROVIDER_BPS = 8500` in `exchange_pricing.py` |
+| Developer | 5% | `DEFAULT_DEVELOPER_BPS = 500` in `exchange_pricing.py` |
+| Treasury / pool | 10% | remainder (enforced by `split_pwm_3way`) |
+
+The developer wallet is hardcoded in `pwm_token_service.py:96`:
+```python
+DEFAULT_DEV_WALLET = "0xca5bDFbc46A05fEfb70FF2136409501B51B88fA8"
+```
+The `get_developer_account()` function resolves the account by `PWM_DEVELOPER_REWARD_EMAIL`
+(default `spiritai@platformai.org`), which is bound to that wallet. The 5% developer
+share is credited as `exchange_dev_reward` transactions to that account's in-platform
+PWM balance on every marketplace call. Treasury takes the remainder via `pool_pwm`.
+
+---
+
+## 2026-06-28 — Parity audit + two fixes (token count, code-copy button)
+
+### Audit result
+Full sweep of all UI surfaces vs. claude.ai. Three divergences found:
+
+| # | Issue | Priority |
+|---|-------|----------|
+| 1 | Token count `X in · Y out` shown after every reply | HIGH |
+| 2 | No copy button on inline code blocks (short snippets) | MEDIUM |
+| 3 | No thumbs up/down feedback buttons | LOW (deferred) |
+
+Everything else confirmed parity-complete: brand, greeting, suggestions, composer,
+streaming, model picker, Think, attachments, Copy/Retry/Edit, conversation management,
+search, artifacts panel, shortcuts, share/export, 5-tab Settings, custom instructions,
+theme cards, font picker, language, clear conversations, server sync.
+
+### Fixes applied (commit `a377b3a` on `Claude_UI_PWM` master)
+
+**Token count removed** — The `else if (inputTokens || outputTokens)` block that
+appended `X in · Y out` after each streamed reply was deleted. Only the "Stopped"
+label for aborted generations remains.
+
+**Per-code-block copy button** — Added `addCodeCopyButtons(container)` helper that
+injects a hover-revealed "Copy / Copied!" button into each `<pre>` element.
+Called at the end of `processArtifacts()` so it decorates only inline snippets (large
+blocks are already replaced by artifact cards). CSS: `.code-copy-btn` is
+`position: absolute; top-right; opacity: 0;` with `pre:hover` fade-in.
+
+### Deployment
+`docker compose up -d --build`. Verified: `addCodeCopyButtons` present ×2 in live JS;
+`in · out` pattern absent from live JS.
+
+---
+
 ## 2026-06-28 — Rich Settings panel (5-section, matches claude.ai)
 
 ### Request
