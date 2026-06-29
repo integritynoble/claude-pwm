@@ -494,3 +494,39 @@ so the new CSS/JS reach users past Cloudflare.
   sits cleanly between greeting and chips.
 - After `localStorage` key set + reload → reminder **hidden** ✅
 - Pushed `6d89ede..d11dd80` to `Claude_UI_PWM` master.
+
+
+---
+
+## 2026-06-29 (follow-up) — No-token chat attempts redirect to token flow
+
+### Request
+For the live Claude app at **https://claude.comparegpt.io/**, when a user tries
+to use chat without a PWM token, send them directly to
+**https://token.comparegpt.io/** so they understand they must get PWM first.
+
+### What changed (commit `b92a09e` on `Claude_UI_PWM` master)
+
+`static/js/app.js` now defines the token-flow URL and redirects no-token chat
+attempts there:
+
+- `sendMessage()` checks `getApiKey()` as before, but now calls
+  `redirectToTokenSite()` instead of opening Settings.
+- `streamAssistantResponse()` has the same guard for regenerate/edit paths.
+- If the user typed a prompt before being redirected, the draft is saved in
+  `sessionStorage` and restored in the composer if they return to Claude.
+
+Users who already have `localStorage["claude_pwm_apikey"]` set are unaffected
+and continue straight into chat.
+
+### Deployment & verification — PASS
+
+Deployed with `docker compose up -d --build` in `Claude_UI_PWM/`.
+Cache-bust advanced to `style.css?v=54cfa83c` / `app.js?v=54cfa83c`.
+
+- `node --check static/js/app.js` -> OK
+- `GET http://127.0.0.1:8103/healthz` ->
+  `{"status":"ok","service":"claude-ui-pwm"}`
+- Playwright headless: fresh context, no token, type prompt, click Send ->
+  navigates to `https://token.comparegpt.io/`
+- Pushed `d11dd80..b92a09e` to `Claude_UI_PWM` master.
