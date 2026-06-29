@@ -438,3 +438,59 @@ Second full sweep of all UI surfaces on `claude.comparegpt.io` vs. claude.ai.
 
 ### Deployment
 `docker compose up -d --build`. Verified via Playwright headless screenshot at 390×844: sidebar class is `collapsed`, hamburger menu visible top-left, full-width content area rendered correctly.
+
+---
+
+## 2026-06-29 — Token reminder: point new users to token.comparegpt.io
+
+### Request
+"When users enter Claude PWM, remind them to come into **token.comparegpt.io**
+to get the PWM token first." (Plus the standing tasks: resume, log session
+history here, keep Claude PWM at parity with Anthropic's Claude.)
+
+### Health check first
+Both environments up before any change:
+- Prod `https://claude.comparegpt.io/healthz` → 200
+- Dev `https://claude.platformai.org/healthz` → 200
+- Prod `?deep=1` → upstream reachable (`status:404`, expected for the bare
+  `/v1/messages` probe). Container `claude_ui_pwm-app-1` up 12h.
+
+### What was built (commit `d11dd80` on `Claude_UI_PWM` master)
+
+**Token reminder notice** — a soft card shown in the empty landing state
+(between the greeting and the suggestion chips) whenever **no PWM token is
+set**:
+
+> ⓘ To start chatting, get your free PWM token at **token.comparegpt.io**,
+> then add it under **Settings**.
+
+| File | Change |
+|------|--------|
+| `static/index.html` | `#token-reminder` block in `#hero` (link to token.comparegpt.io + inline "Settings" button); Settings API-key hint changed from "physicsworldmodel.org → Wallet" to a **token.comparegpt.io** link |
+| `static/css/style.css` | `.token-reminder` card (raised-bg, accent icon + links) + `.inline-link` style |
+| `static/js/app.js` | `updateTokenReminder()` toggles it by `getApiKey()`; called in `startNewChat()` (covers init) and after Save Settings; inline "Settings" button opens the modal |
+
+**Behavior:** visible only when there is no key, and only on the empty
+landing screen — it never covers an active chat. The moment a key exists it
+is hidden, so returning users never see it.
+
+### Parity note
+This is a **deliberate, necessary PWM divergence** from claude.ai (claude.ai
+has no token step). It's in the same accepted category as the Settings
+"PWM API Key" field — users genuinely need to know where to get a token, and
+it's styled to match the claude.ai aesthetic (clay/coral accent, soft card).
+All other surfaces remain parity-complete per audits #1 and #2; nothing else
+in the UI changed.
+
+### Deployment & verification — PASS ✅
+`docker compose up -d --build`. Cache-bust hash advanced to `style.css?v=f54c9bbe`
+so the new CSS/JS reach users past Cloudflare.
+
+- `node --check static/js/app.js` → OK
+- `token.comparegpt.io` present in served HTML on **prod** and **dev**
+- Playwright headless (fresh context, no key) → `#token-reminder` **visible**,
+  text exactly *"To start chatting, get your free PWM token at
+  token.comparegpt.io, then add it under Settings."*; screenshot confirms it
+  sits cleanly between greeting and chips.
+- After `localStorage` key set + reload → reminder **hidden** ✅
+- Pushed `6d89ede..d11dd80` to `Claude_UI_PWM` master.
