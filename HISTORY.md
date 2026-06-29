@@ -575,3 +575,53 @@ Cache-bust advanced to `style.css?v=554a4418` / `app.js?v=554a4418`.
 - Playwright headless no-token send path still redirects to
   `https://token.comparegpt.io/`
 - Pushed `b92a09e..1db5675` to `Claude_UI_PWM` master.
+
+
+---
+
+## 2026-06-29 (follow-up) — Direct PWM sign-in for Claude
+
+### Request
+Let Claude PWM users log in directly through **token.comparegpt.io**,
+**physicsworldmodel.org**, or a **Google account**, instead of manually copying a
+PWM token into Settings.
+
+### What changed
+
+| Repo | Commit | Change |
+|------|--------|--------|
+| `Claude_UI_PWM` | `169076c` | Claude now starts the first-party token app-login flow at `https://token.comparegpt.io/api/auth/app-login?redirect_uri=https%3A%2F%2Fclaude.comparegpt.io%2F&method=pwm`; it consumes returned `#pwm_key=...`, stores it in `localStorage['claude_pwm_apikey']`, scrubs the URL, hides the token reminder, and restores any draft prompt. |
+| `token` | `6ad9eac` on `feat/app-login-sso` | Token portal app-login allowlist includes `https://claude.comparegpt.io/` and `https://claude.platformai.org/`; minted app keys are labelled by app (`claude`, `chatgpt`, etc.); unauthenticated app-login redirects carry `method=pwm` so the token login page highlights the PWM/Google sign-in option. |
+
+The direct path is now: Claude no-token send → token app-login → token portal
+login (Google, Physics World Model SSO, wallet/email options already supported
+there) → token portal mints `sk-pwm-...` → redirects back to Claude with the key
+in the URL fragment → Claude stores the key automatically.
+
+Manual `sk-pwm-...` paste remains available in Settings as a fallback.
+
+### Deployment & verification — PASS
+
+Both services were rebuilt and restarted:
+
+```bash
+cd /home/spiritai/pwm/token && docker compose up -d --build
+cd /home/spiritai/pwm/Claude_UI_PWM && docker compose up -d --build
+```
+
+Checks:
+
+- `node --check static/js/app.js` -> OK
+- `python3 -m pytest backend/tests/test_auth_routes.py -q` in `token/` -> 6 passed
+- `GET https://token.comparegpt.io/api/health` -> `{"status":"ok"}`
+- `GET https://claude.comparegpt.io/healthz` ->
+  `{"status":"ok","service":"claude-ui-pwm"}`
+- Token app-login for Claude no-session user -> 302 to
+  `https://token.comparegpt.io/login?...&method=pwm`
+- Playwright headless:
+  - `/#pwm_key=sk-pwm-fragment-test` is stored as the Claude PWM key and the URL
+    fragment is scrubbed
+  - no-token Send builds the token app-login URL with Claude redirect +
+    `method=pwm`, then navigates to token.comparegpt.io
+- Claude live cache-bust advanced to `style.css?v=2eadce59` /
+  `app.js?v=2eadce59`.
