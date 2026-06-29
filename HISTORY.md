@@ -530,3 +530,48 @@ Cache-bust advanced to `style.css?v=54cfa83c` / `app.js?v=54cfa83c`.
 - Playwright headless: fresh context, no token, type prompt, click Send ->
   navigates to `https://token.comparegpt.io/`
 - Pushed `d11dd80..b92a09e` to `Claude_UI_PWM` master.
+
+
+---
+
+## 2026-06-29 (follow-up) — Claude UI parity controls
+
+### Request
+Check whether Claude PWM matches Anthropic Claude and, where it does not, make
+it match more closely.
+
+### Result
+Anthropic's signed-in Claude UI cannot be fully audited from this host without a
+Claude account session, but the known visible parity gaps from the prior audits
+were addressed in the live Claude PWM UI.
+
+### What changed (commit `1db5675` on `Claude_UI_PWM` master)
+
+| File | Change |
+|------|--------|
+| `static/index.html` | Replaced the visible native model `<select>` with a Claude-style model picker popover while keeping the hidden select as the source of truth; added a mic/dictation button beside Send. |
+| `static/css/style.css` | Added model picker/menu styling, active check state, composer right-side controls, mic active styling, and mobile sizing for the topbar picker. |
+| `static/js/app.js` | Renders/selects model menu options, persists the selected model exactly as before, keeps composer/topbar labels synced, and wires browser Speech Recognition for voice input when supported. |
+
+The PWM-specific token flow remains a deliberate divergence from Anthropic
+Claude: users still need a PWM token, and no-token chat attempts still redirect
+to `https://token.comparegpt.io/`.
+
+### Deployment & verification — PASS
+
+Deployed with `docker compose up -d --build` in `Claude_UI_PWM/`.
+Cache-bust advanced to `style.css?v=554a4418` / `app.js?v=554a4418`.
+
+- `node --check static/js/app.js` -> OK
+- `GET http://127.0.0.1:8103/healthz` ->
+  `{"status":"ok","service":"claude-ui-pwm"}`
+- `GET https://claude.comparegpt.io/healthz` ->
+  `{"status":"ok","service":"claude-ui-pwm"}`
+- Playwright headless: model picker visible, opens 6 options, selecting
+  `Claude Opus 4.8` updates topbar label, composer label, and
+  `localStorage['claude_pwm_model']`
+- Playwright headless mobile 390x844: hamburger, model picker, and theme button
+  fit without overlap
+- Playwright headless no-token send path still redirects to
+  `https://token.comparegpt.io/`
+- Pushed `b92a09e..1db5675` to `Claude_UI_PWM` master.
