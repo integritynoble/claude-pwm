@@ -625,3 +625,83 @@ Checks:
     `method=pwm`, then navigates to token.comparegpt.io
 - Claude live cache-bust advanced to `style.css?v=2eadce59` /
   `app.js?v=2eadce59`.
+
+---
+
+## 2026-07-01 — Model lineup aligned with current Anthropic models (logged retroactively)
+
+*This commit (`2d80f8c` on `Claude_UI_PWM` master) shipped on 2026-07-01 but was
+not logged here at the time; recorded retroactively during the 2026-07-02
+session resume.*
+
+### What changed
+- **Default model** is now `claude-sonnet-5` (was `claude-sonnet-4-6`), matching
+  claude.ai's current default. Model picker updated accordingly
+  (`static/index.html`, `static/js/app.js`, README).
+- **Thinking handling rewritten** in `routers/chat.py` (`_apply_thinking()`):
+  - Claude 5-family + Opus 4.6–4.8 + Sonnet 4.6 → `thinking: {type: "adaptive",
+    display: "summarized"}` when the Think toggle is on.
+  - Haiku 4.5 / Opus 4.5 / Sonnet 4.5 / Sonnet 3.7 → manual
+    `{type: "enabled", budget_tokens: 6000}`.
+  - Sonnet 5 defaults to adaptive thinking server-side, so the Think toggle's
+    **off** state now sends an explicit `{type: "disabled"}` for it.
+- Tests extended in `tests/test_chat_persona.py`; screenshot seed updated.
+
+### Verification
+Container rebuilt and live: served JS contains `claude-sonnet-5`
+(cache-bust `v=c0e157b4` at the time), `/healthz` 200 on prod + dev.
+
+---
+
+## 2026-07-02 — Session resume + thumbs up/down feedback (last audit gap closed)
+
+### Request
+Resume the Claude session, log history into `claude-pwm`, and continue the
+standing mission: **Claude PWM must be the same as Anthropic's Claude in all
+usage and experience.**
+
+### Health check first
+- Prod `https://claude.comparegpt.io/healthz` → 200
+- Dev `https://claude.platformai.org/healthz` → 200
+- Prod `?deep=1` → upstream reachable; container up 14h with the 2026-07-01
+  model-alignment build already live.
+
+### Parity gap closed — feedback buttons (commit `c753df3` on `Claude_UI_PWM` master)
+
+Thumbs up/down was the **last deferred item from parity audit #1
+(2026-06-28)** — claude.ai shows feedback buttons under assistant replies;
+Claude PWM had only Copy/Retry.
+
+| File | Change |
+|------|--------|
+| `static/js/app.js` | `ICON_THUMB_UP`/`ICON_THUMB_DOWN` icons; `makeFeedbackBtn()` builds icon-only buttons with `data-verdict`; assistant action row is now Copy · 👍 · 👎 · Retry; verdict stored on the message as `feedback: 'up'|'down'|null` (click again to clear, selecting one deselects the other) and saved via `saveCurrentChat()`; `stripForStorage` keeps the `feedback` field so it syncs to the server too |
+| `static/css/style.css` | `.msg-action-btn.icon-only` (tighter padding) and `.selected` (accent color, filled icon) |
+
+No backend change needed — feedback rides inside the conversation's stored
+messages. Like claude.ai, the verdict is per-message and reversible.
+
+### Deployment & verification — PASS
+`docker compose up -d --build`; cache-bust advanced to `app.js?v=e67c58c3`.
+
+- `node --check static/js/app.js` → OK
+- Playwright headless (seeded conversation): both buttons render with
+  claude.ai tooltips ("Good response" / "Bad response"); clicking 👍 selects
+  it and writes `feedback:"up"` to localStorage; clicking 👎 switches; second
+  click clears; **verdict survives page reload**; zero page errors.
+  (First test run failed only because the test's `add_init_script` re-seeded
+  localStorage on reload — test artifact, not an app bug; fixed with a
+  conditional seed.)
+- Prod `https://claude.comparegpt.io/` serves `v=e67c58c3` with
+  `makeFeedbackBtn` present; `/healthz` 200 on prod + dev.
+- Pushed `2d80f8c..c753df3` to `Claude_UI_PWM` master.
+
+### Parity status after this session
+All items from audits #1 and #2 are now closed or intentionally accepted:
+- ✅ Feedback buttons — **done this session**
+- ✅ Model picker popover, voice/mic input — done 2026-06-29 (`1db5675`)
+- ✅ Current model lineup (Sonnet 5 default, adaptive thinking) — done 2026-07-01 (`2d80f8c`)
+- ⚠️ Accepted divergences: PWM token flow (token.comparegpt.io reminder +
+  redirect + app-login), Settings "PWM API Key" field, Settings button instead
+  of account avatar (no user accounts)
+- ⏸ Projects feature — still not implemented (large backend effort; only if
+  the director requests it)
