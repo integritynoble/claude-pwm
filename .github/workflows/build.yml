@@ -1,5 +1,13 @@
 name: Build standalone Claude binaries
 
+# Claude Code ships fully standalone NATIVE binaries per platform (the
+# @anthropic-ai/claude-code-<platform> optionalDependencies). There is nothing
+# to bundle — repackage the official binaries under the claude-pwm names at ONE
+# pinned version. The previous pipeline pkg-wrapped the native ELF/Mach-O as if
+# it were JavaScript (instant SyntaxError crash on linux/macos) and let each OS
+# runner resolve "latest" independently (Windows shipped 2.1.197 in the
+# v2.1.198 release).
+
 on:
   push:
     branches: [main]
@@ -11,120 +19,8 @@ on:
         default: ''
 
 jobs:
-  build-linux:
-    name: Build (Linux x86_64)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Claude Code + pkg
-        run: |
-          VERSION="${{ github.event.inputs.claude_version }}"
-          if [ -z "$VERSION" ]; then
-            npm install -g @anthropic-ai/claude-code
-          else
-            npm install -g @anthropic-ai/claude-code@$VERSION
-          fi
-          npm install -g @yao-pkg/pkg
-          claude --version
-
-      - name: Bundle
-        run: |
-          CLAUDE_DIR=$(npm root -g)/@anthropic-ai/claude-code
-          CLAUDE_ENTRY="$CLAUDE_DIR/bin/claude.exe"
-          echo "Entry: $CLAUDE_ENTRY"
-          # pkg needs a package.json with bin field; the npm package provides it
-          pkg "$CLAUDE_DIR" \
-            --targets node20-linux-x64 \
-            --output claude-pwm-linux \
-            --compress GZip
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: claude-pwm-linux
-          path: claude-pwm-linux
-          retention-days: 30
-
-  build-macos:
-    name: Build (macOS arm64)
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Claude Code + pkg
-        run: |
-          VERSION="${{ github.event.inputs.claude_version }}"
-          if [ -z "$VERSION" ]; then
-            npm install -g @anthropic-ai/claude-code
-          else
-            npm install -g @anthropic-ai/claude-code@$VERSION
-          fi
-          npm install -g @yao-pkg/pkg
-          claude --version
-
-      - name: Bundle
-        run: |
-          CLAUDE_DIR=$(npm root -g)/@anthropic-ai/claude-code
-          echo "Entry dir: $CLAUDE_DIR"
-          pkg "$CLAUDE_DIR" \
-            --targets node20-macos-arm64 \
-            --output claude-pwm-macos \
-            --compress GZip
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: claude-pwm-macos
-          path: claude-pwm-macos
-          retention-days: 30
-
-  build-windows:
-    name: Build (Windows x86_64)
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Claude Code
-        run: |
-          $VERSION = "${{ github.event.inputs.claude_version }}"
-          if ($VERSION -eq "") {
-            npm install -g @anthropic-ai/claude-code
-          } else {
-            npm install -g "@anthropic-ai/claude-code@$VERSION"
-          }
-          claude --version
-
-      - name: Extract native binary
-        run: |
-          # claude-code ships bin/claude.exe as an already-bundled native Windows
-          # PE binary. Bundling it again with pkg breaks it. Just copy it.
-          $CLAUDE_DIR = "$(npm root -g)\@anthropic-ai\claude-code"
-          Write-Host "Package dir: $CLAUDE_DIR"
-          $SRC = "$CLAUDE_DIR\bin\claude.exe"
-          Write-Host "Source: $SRC"
-          Copy-Item $SRC "claude-pwm-windows.exe"
-          Write-Host "Size: $((Get-Item 'claude-pwm-windows.exe').Length) bytes"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: claude-pwm-windows
-          path: claude-pwm-windows.exe
-          retention-days: 30
-
-  release:
-    name: Create release
-    needs: [build-linux, build-macos, build-windows]
+  repack:
+    name: Repackage official native binaries
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -135,19 +31,37 @@ jobs:
         with:
           node-version: '20'
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: claude-pwm-linux
-      - uses: actions/download-artifact@v4
-        with:
-          name: claude-pwm-macos
-      - uses: actions/download-artifact@v4
-        with:
-          name: claude-pwm-windows
-
-      - name: Get Claude version
+      - name: Resolve version (single source of truth for ALL platforms)
         id: ver
-        run: echo "claude=$(npm show @anthropic-ai/claude-code version)" >> $GITHUB_OUTPUT
+        run: |
+          V="${{ github.event.inputs.claude_version }}"
+          if [ -z "$V" ]; then
+            V=$(npm show @anthropic-ai/claude-code version)
+          fi
+          echo "claude=$V" >> "$GITHUB_OUTPUT"
+          echo "Building claude-pwm for Claude Code $V"
+
+      - name: Extract official binaries
+        run: |
+          set -euo pipefail
+          V="${{ steps.ver.outputs.claude }}"
+          repack() {  # repack <platform-suffix> <output-name>
+            npm pack "@anthropic-ai/claude-code-$1@$V" --silent
+            rm -rf x && mkdir x
+            tar xzf "anthropic-ai-claude-code-$1-$V.tgz" -C x
+            mv x/package/claude* "$2"
+          }
+          repack linux-x64    claude-pwm-linux
+          repack darwin-arm64 claude-pwm-macos
+          repack win32-x64    claude-pwm-windows.exe
+          chmod +x claude-pwm-linux claude-pwm-macos
+          ls -la claude-pwm-*
+
+      - name: Smoke test (the old pipeline shipped binaries that crashed on startup)
+        run: |
+          ./claude-pwm-linux --version
+          # PE sanity for the Windows exe: MZ magic present
+          head -c2 claude-pwm-windows.exe | grep -q MZ
 
       - uses: softprops/action-gh-release@v2
         with:
@@ -156,8 +70,8 @@ jobs:
           body: |
             ## claude-pwm — standalone Claude Code binaries
 
-            Packages `@anthropic-ai/claude-code@${{ steps.ver.outputs.claude }}` with Node.js built-in.
-            **No Node.js installation required.**
+            The official native `@anthropic-ai/claude-code@${{ steps.ver.outputs.claude }}`
+            binaries, repackaged under one name. **No Node.js required.**
 
             ### macOS (Apple Silicon)
             ```bash
@@ -178,7 +92,7 @@ jobs:
             ### Use with PWM exchange
             ```bash
             export ANTHROPIC_BASE_URL=https://physicsworldmodel.org/api/v1/exchange/anthropic
-            export ANTHROPIC_AUTH_TOKEN=pwm_your_key_here
+            export ANTHROPIC_AUTH_TOKEN=sk-pwm-your_key_here
             claude-pwm
             ```
           files: |
