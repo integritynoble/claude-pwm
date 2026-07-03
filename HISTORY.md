@@ -858,3 +858,55 @@ platform subsystems (web search, code execution, file creation, research,
 memory, connectors) — each a deliberate multi-session build if requested.
 Deliberate divergences unchanged: PWM token flow, Settings API-key field,
 Settings button instead of avatar.
+
+---
+
+## 2026-07-03 — Web search shipped (claude.ai parity)
+
+### Request
+"Implement web search so Claude PWM matches claude.ai."
+
+### Feasibility discovery (the key finding)
+The PWM exchange (`exchange_proxy.py::_proxy_and_settle`) forwards request
+bodies **as-is** (only model-tag normalization + Claude-Code system block)
+and streams raw SSE back — so Anthropic's server-side `web_search_20250305`
+tool passes straight through. Proven live with a temp minted key BEFORE any
+code was written: real search executed, `server_tool_use` /
+`web_search_tool_result` / citation blocks streamed back. **Zero
+exchange-side changes; Claude_UI_PWM-only build.**
+
+### What was built (merge `7198be8`, spec `2026-07-03-web-search-design.md`,
+plan `2026-07-03-web-search.md`, subagent-driven on `feature/web-search`)
+- `routers/chat.py`: boolean `web_search` in the chat body adds the tool
+  (`max_uses: 5`) — mirrors the `thinking` flag pattern.
+- Composer: globe **Search** toggle beside Think, on by default
+  (`claude_pwm_websearch`, global not per-conversation).
+- Stream rendering: live "Searching the web…" chips that resolve to
+  "Searched: <query>" (parsed from `input_json_delta`), inline ` [n]`
+  citation markers from `citations_delta`, and a collapsible **Sources · N**
+  section (favicon/title/domain links, http(s)-only scheme guard).
+- Persistence: `searches`/`sources` stored on the assistant message (kept by
+  `stripForStorage`, server round-trip verified live), re-rendered from
+  saved conversations; `sanitizeForApi` confirmed to strip them from
+  upstream requests (no 400s on multi-turn after a search).
+
+### Verification — PASS
+- 27 pytest; `node --check`; `WEB SEARCH E2E PASS` + `PROJECTS E2E PASS`
+  (regression) against the live production build on 8103
+- Final whole-branch review: READY TO MERGE (no Critical/Important)
+- Live search through prod `claude.comparegpt.io` with temp key: 7 search
+  results + 2 citation locations streamed; key deleted
+- Cache-bust `app.js?v=6034a6d5`; prod + dev `/healthz` 200
+- Deploy note: first post-deploy check ran before the container finished
+  starting (empty local healthz + edge 502 + one flaky e2e) — wait for
+  `/healthz` before running gates.
+
+### Accepted follow-ups
+- Share page / Markdown export omit the Sources list (citation `[n]`
+  markers dangle there)
+- Zero-result search shows "Search unavailable"
+- Sources numbering counts uncited results too
+
+### Parity scoreboard
+**Web search: ✅ done.** Remaining platform-subsystem gaps: code execution /
+analysis tool, file creation, Research mode, Memory, Connectors/MCP.
