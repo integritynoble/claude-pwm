@@ -778,3 +778,34 @@ final whole-branch review) → merge `f625c71` to master → deploy.
 closed. Remaining deliberate divergences: the PWM token flow
 (token.comparegpt.io), the Settings "PWM API Key" field, and the Settings
 button in place of an account avatar.
+
+---
+
+## 2026-07-03 — "Why is there no Fable 5 support?" — diagnosis + CLI release
+
+### Finding: the web UI DOES support Fable 5 (verified live)
+Picker option, `chat.py` adaptive-thinking handling, and exchange pricing
+(`exchange_pricing.py:50`) all present since `2d80f8c`. Proven end-to-end
+against prod: minted a temporary hashed diagnostic key for the owner account
+(plaintext keys no longer exist — `users.api_key` is empty; keys live
+SHA-256-hashed in the `api_keys` table, so the old 2026-06-26 read-from-DB
+test no longer works), sent `model: claude-fable-5` to
+`claude.comparegpt.io/api/chat/stream` → HTTP 200 SSE, reply "FABLE OK" from
+`claude-fable-5`, 355 in / 8 out tokens. Diagnostic key deleted afterwards.
+A user not seeing Fable 5 in the live picker has a stale cached page —
+hard refresh.
+
+### Real gap: the claude-pwm CLI release binaries were stale
+The GitHub releases packaged a pre-Claude-5 `@anthropic-ai/claude-code`.
+Triggered `build.yml` (`gh workflow run`) → run `28666741006` succeeded →
+release **v2.1.199** (Claude Code 2.1.199). Verified by downloading
+`claude-pwm-linux`: `--version` → 2.1.199, binary contains 147
+`claude-fable-5` references. Note: the workflow also runs on every push to
+main, so routine history commits keep releases fresh automatically.
+
+### How to mint a test key next time (keys are hashed now)
+```sql
+INSERT INTO api_keys (user_id, name, key_hash, prefix, last4, created_at)
+VALUES (<owner id>, '<purpose>-temp', sha256_hex_of_raw, left(raw,10), right(raw,4), now());
+-- test, then DELETE the row.
+```
