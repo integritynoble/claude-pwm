@@ -809,3 +809,52 @@ INSERT INTO api_keys (user_id, name, key_hash, prefix, last4, created_at)
 VALUES (<owner id>, '<purpose>-temp', sha256_hex_of_raw, left(raw,10), right(raw,4), now());
 -- test, then DELETE the row.
 ```
+
+---
+
+## 2026-07-03 — Parity audit #3 + response Styles picker
+
+### Request
+"Ensure the Claude of PWM has the same features as the Claude from Anthropic."
+
+### Audit result
+All previously shipped surfaces verified live and healthy (prod + dev 200,
+upstream reachable, 9/9 feature markers in served HTML). Gap analysis vs.
+claude.ai's current feature set:
+
+| Gap | Status |
+|-----|--------|
+| **Styles** (composer response-style picker) | **built this session** ✅ |
+| Web search in chat | deferred — investigate whether the PWM exchange passes the Anthropic server-side `web_search` tool through; medium effort |
+| Analysis tool / code execution | deferred — major subsystem |
+| File creation (docx/xlsx), Research mode, Memory, Connectors/MCP | deferred — major subsystems |
+| Account avatar | intentional divergence (no user accounts) |
+
+### Styles feature (commit `fd0adc3` on `Claude_UI_PWM` master)
+Spec: `docs/superpowers/specs/2026-07-03-styles-feature-design.md`.
+
+- Composer chip beside **Think** (pill, shows active style name, accent when
+  active) opens an upward popover: Normal / Concise / Explanatory / Formal →
+  custom styles → "Create & edit styles…".
+- Custom styles modal: name ≤ 40 + prompt ≤ 1500, edit/delete rows; creating
+  a style auto-selects it (claude.ai behavior); deleting the active style
+  resets to Normal.
+- Injection: `buildSystemPrompt()` adds a `<response-style-preset>` block
+  (after user custom instructions, before language/project context).
+- Storage: `claude_pwm_style` (active id) + `claude_pwm_styles` (list),
+  device-local like custom instructions — **zero backend changes**.
+
+### Verification — PASS
+- `node --check` OK; 25 pytest passed; `PROJECTS E2E PASS` (regression)
+- Styles Playwright test (menu contents, preset select → captured
+  `/api/chat/stream` request's `system` contains the preset text, custom
+  style create/inject/reload-persist/delete-resets) → **PASS against the
+  live production build**; cache-bust advanced to `app.js?v=70264a3c`
+- Prod + dev `/healthz` 200; prod HTML serves `style-btn`
+
+### Parity scoreboard
+All **UI-level** claude.ai features are now at parity. Remaining gaps are
+platform subsystems (web search, code execution, file creation, research,
+memory, connectors) — each a deliberate multi-session build if requested.
+Deliberate divergences unchanged: PWM token flow, Settings API-key field,
+Settings button instead of avatar.
