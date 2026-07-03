@@ -705,3 +705,76 @@ All items from audits #1 and #2 are now closed or intentionally accepted:
   of account avatar (no user accounts)
 - ⏸ Projects feature — still not implemented (large backend effort; only if
   the director requests it)
+
+---
+
+## 2026-07-02/03 — Projects feature shipped (claude.ai parity complete)
+
+### Request
+"Implement the Projects feature so Claude PWM matches claude.ai fully."
+
+### Process
+Full skill-driven cycle: brainstormed design (Approach A: mirror the
+conversations pattern at every layer) → spec
+(`Claude_UI_PWM/docs/superpowers/specs/2026-07-02-projects-feature-design.md`)
+→ 8-task implementation plan
+(`docs/superpowers/plans/2026-07-02-projects-feature.md`) → subagent-driven
+execution on branch `feature/projects` (fresh implementer + reviewer per task,
+final whole-branch review) → merge `f625c71` to master → deploy.
+
+### What was built
+- **Backend:** `routers/projects.py` — `GET/PUT/DELETE /api/projects[/{id}]`,
+  SQLite `projects` table keyed by PWM-token SHA-256 (same auth as
+  conversations); conversations gained a nullable `project_id`; deleting a
+  project unlinks its chats (they return to Recents). `tests/test_projects.py`
+  + `tests/conftest.py` (suite-wide test-DB isolation — the old per-module
+  env-var approach never worked because `test_chat.py` imported `main` first,
+  so the suite had been hitting the real dev DB).
+- **Frontend:** sidebar Projects entry; `#/projects` grid with create/edit/
+  delete; project detail view (chat list, new-chat-in-project, per-project
+  custom instructions modal, knowledge panel: paste text + upload
+  txt/md/csv/code files); knowledge caps 30 docs / 500 KB per doc / 2 MB total
+  (UTF-8 byte-accurate); project instructions + knowledge injected client-side
+  via `buildSystemPrompt()` (`<project-instructions>` / `<project-knowledge>`
+  blocks); project breadcrumb above chats; "Add to project" picker on sidebar
+  chat items; hash routing; localStorage-first with merge-by-updatedAt server
+  sync.
+
+### Review-loop catches worth remembering
+1. **Upload race:** multi-file knowledge upload re-read the mutable
+   `viewProjectId` after each `await` — files could attach to the wrong
+   project if the user navigated mid-upload. Fixed by pinning the target id
+   (`2e242f8`).
+2. **Data-loss regression:** a Task 7 implementer made streams-on-error
+   persist the chat, which would have let an errored regenerate/edit overwrite
+   saved history with a truncated copy. Caught by adversarial review; fixed
+   with `saveCurrentChatIfGrown()` + e2e regression step (`d4dd39f`).
+3. **Byte-cap Critical:** client caps counted UTF-16 code units while the
+   server caps UTF-8 bytes — CJK-heavy knowledge could pass client checks,
+   413 silently on sync, then be wiped locally by the old overwrite-sync.
+   Fixed with `utf8Bytes()` caps + merge-by-updatedAt sync (`47d9a08`).
+
+### Verification — PASS
+- `python3 -m pytest tests/ -q` → 25 passed
+- `scripts/e2e_projects.py` (create → instructions → knowledge → chat with
+  system-prompt injection asserted from the captured request → breadcrumb →
+  delete keeps chat → regenerate-error keeps history) → **PROJECTS E2E PASS
+  against the live production build on 8103**
+- Prod `https://claude.comparegpt.io/` serves the Projects UI; `/healthz` 200
+  on prod + dev; cache-bust advanced to `app.js?v=f3e83403`
+- Pushed `c753df3..f625c71` to `Claude_UI_PWM` master
+
+### Accepted follow-ups (non-blocking, from final review)
+- A maxed 2 MB knowledge project can exceed upstream token limits (user sees
+  the upstream error banner; consider a lower cap or RAG later)
+- `#/project/<id>` deep link on a fresh device falls back to the grid until
+  sync lands
+- Offline project delete can resurrect on next sync (same semantics as
+  conversations)
+- `tests/conftest.py` hard-codes the tmp DB path (fine until parallel CI)
+
+### Parity scoreboard
+**Projects: ✅ done.** All previously deferred claude.ai parity items are now
+closed. Remaining deliberate divergences: the PWM token flow
+(token.comparegpt.io), the Settings "PWM API Key" field, and the Settings
+button in place of an account avatar.
