@@ -910,3 +910,73 @@ plan `2026-07-03-web-search.md`, subagent-driven on `feature/web-search`)
 ### Parity scoreboard
 **Web search: ✅ done.** Remaining platform-subsystem gaps: code execution /
 analysis tool, file creation, Research mode, Memory, Connectors/MCP.
+
+---
+
+## 2026-07-04 — Voice conversation mode + mobile composer parity + "responds so slow"
+
+### Request
+"Resume the session; focus voice conversation; solve the mobile match."
+Mid-session user report: "https://claude.comparegpt.io/ respond so slow".
+
+### 1. "Responds so slow" — diagnosis + fix deployed immediately
+- Static path fast (edge TTFB 163 ms, local 3 ms), host load normal, chat
+  streams 200 in logs. Timed end-to-end chat with a temp minted key (per the
+  2026-07-03 procedure, key deleted after): local 1.4 s total, edge ~2 s with
+  prompt TCP close. Infra healthy.
+- Root cause of the *felt* slowness: an **uncommitted `message_stop` fix**
+  found in the working tree — the exchange can hold the SSE connection open
+  for tens of seconds after `message_stop`; without breaking the read loop,
+  `isStreaming` stayed true and follow-up sends were silently swallowed until
+  TCP close ("slow" = the UI ignoring you after each reply). The 17-h-old
+  container predated the fix.
+- Committed it (`34dacac`), stashed the in-progress feature work, deployed the
+  fix alone (cache-bust `v=c6e3ea03`), verified on prod edge, then resumed.
+- Side finding: Cloudflare 403s `Python-urllib` UAs on `/api/chat/stream`
+  (bot rule); curl/browsers pass. Affects diagnostics only.
+
+### 2. Voice conversation mode (claude.ai parity) — commit `563385e`
+Spec: `docs/superpowers/specs/2026-07-04-voice-mode-mobile-parity-design.md`.
+Client-only Web Speech loop (rejected: server STT/TTS — exchange is
+Anthropic-messages-only): **listen → auto-send after 1.4 s silence → reply
+spoken aloud → listen again.**
+- `#voice-mode-btn` (waveform icon) in composer-right opens a full-screen
+  overlay: pulsing sunburst orb (state-animated: pulse/spin/talk), status
+  line, live interim transcript, Mute + End pills; tap orb interrupts TTS;
+  Escape ends.
+- Turns go through the existing `sendMessage()` — voice chats are ordinary
+  conversations (history, sync, rendering untouched).
+- `buildSystemPrompt()` adds a `<voice-mode>` brevity hint only while active.
+- TTS: markdown stripped (code fences → "Code sample omitted"), sentence
+  chunking ≤220 chars (Chrome long-utterance cutoff), voice matched to
+  `navigator.language`. Recognition auto-restarts on Chrome's spontaneous
+  `onend`. `not-allowed` mic error shows an in-overlay message and exits.
+- Firefox (no SpeechRecognition): button shows "not supported" error;
+  one-shot dictation mic unchanged.
+- New gate `scripts/e2e_voice_mode.py`: stubs STT/TTS, intercepts
+  `/api/chat/stream`, drives the full loop incl. `<voice-mode>` system
+  assert, spoken-reply assert, return-to-listening, mute/end.
+
+### 3. Mobile match (composer parity) — same commit
+390×844 Playwright audit of the live build found real breakage:
+composer chips overlapped mic/send, `#composer-model` overflowed the
+viewport by 63 px (page scrolled horizontally, scrollWidth 453), and the
+style popover opened off-screen (x→489).
+Fix (CSS, ≤760px): icon-only chips (labels hidden), model label hidden,
+tighter gaps, `#style-menu` clamped to `calc(100vw - 56px)`.
+Re-audit: **scrollWidth 390 on all surfaces**, no overlap, style menu
+fully on-screen; desktop unchanged.
+
+### Verification — PASS
+- `node --check`; 27 pytest; VOICE + PROJECTS + WEB SEARCH e2e **all PASS
+  against the live production build on 8103** (after `/healthz` wait)
+- Prod + dev `/healthz` 200, `?deep=1` upstream reachable; both serve
+  cache-bust `app.js?v=aaf6484f` with the voice overlay markup
+- Pushed `7198be8..563385e` to `Claude_UI_PWM` master
+
+### Parity scoreboard
+**Voice conversation: ✅ done. Mobile composer: ✅ fixed.**
+Remaining platform-subsystem gaps: code execution/analysis, file creation,
+Research mode, Memory, Connectors/MCP. Note: another session left an
+account-sign-in spec + plan on master (`7d24e8a`, `4b21822`) — docs only,
+not yet implemented.
