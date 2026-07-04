@@ -980,3 +980,82 @@ Remaining platform-subsystem gaps: code execution/analysis, file creation,
 Research mode, Memory, Connectors/MCP. Note: another session left an
 account-sign-in spec + plan on master (`7d24e8a`, `4b21822`) — docs only,
 not yet implemented.
+
+---
+
+## 2026-07-04 (session 2) — Live testing round: voice fix, mobile drawer, account sign-in shipped
+
+### Requests (in order)
+"Test voice conversation on the real site" → "test the mobile match on the
+real site" → "set the logout button" → "remove the PWM API key; connect via
+token.comparegpt.io / physicsworldmodel.org / Google" → "in voice
+conversation, there is no response".
+
+### 1. Voice conversation live test — PASS, then a real bug fixed
+First live run (temp key, deleted after): full loop against prod — fake
+speech in (headless has no mic), real exchange→Anthropic reply at +6.5 s,
+"Two plus two is four." handed to TTS, loop returned to listening. Then the
+user hit **"no response"** in a real browser: the stubbed-TTS e2e couldn't
+see real speechSynthesis failure modes. Fixed (`24d1063`): only cancel()
+when something is queued (Chrome swallows utterances queued right after
+cancel — short replies never fired onend and wedged the loop at "Speaking"),
+resume() after speak (stuck-paused queue), per-utterance onerror, and a 2 s
+watchdog that shows the reply and resumes listening when the engine never
+starts (no installed voices). Recognition errors audio-capture/network now
+surface instead of listening forever. Dead-TTS-engine recovery proven by a
+dedicated Playwright scenario; live voice retest on prod passed.
+
+### 2. Mobile live test — found + fixed the drawer trap
+`mobile_live_test.py` (390×844, per-surface scrollWidth + out-of-viewport +
+composer-overlap asserts): the open drawer **covered the hamburger with no
+way to close it** (only picking a chat escaped). Fix (`9a7e47f`):
+`#sidebar-scrim` tap-to-close backdrop, pure CSS sibling visibility.
+Final full sweep on prod: **all 10 checks PASS** (landing, composer, style
+menu, model menu, drawer scrim, chat with code, settings, voice overlay).
+
+### 3. Conversations sync data-loss fix (found during testing)
+`/api/conversations` 200-with-[] for any unknown key + overwrite-pull meant
+a key change or silently failed save PUT destroyed local chats on next boot.
+`syncFromServer` now merges by updatedAt (same pattern as projects sync
+47d9a08) and re-uploads local-only chats (`bcbe88c`). Known tradeoff:
+delete-elsewhere can resurrect if its server DELETE failed (same as
+projects); manual Advanced-key swap without sign-out uploads the old
+device's chats to the new key's namespace (expert path, noted as follow-up).
+
+### 4. Account sign-in shipped (spec 2026-07-03, plan executed to the end)
+The "logout button" and "remove API key" requests were exactly the pending
+account-signin spec. Task 1 (token repo: email in app-login fragment) was
+already merged by a prior session — deployed its backend this session.
+Claude side (merge `a7d59f5`, branch rebased onto current master):
+- Sidebar bottom: signed-in **account row** (avatar initial + email or
+  "Connected", popover with Settings / Sign out) or **Sign in** button +
+  gear when signed out.
+- signOut(): confirm → clears exactly claude_pwm_apikey / _account_email /
+  _conversations / _projects (server copies persist; re-sync on next
+  sign-in).
+- Settings → Profile: Account block ("Signed in as <email>." / "Connected
+  with an access key." / "Not signed in." + sign in/out); the API-key field
+  survives ONLY inside a collapsed "Advanced — connect with an API key"
+  details (id #api-key-input unchanged); token reminder copy is key-free
+  ("sign in with your Google or Physics World Model account").
+- Review (subagent, whole branch): READY TO MERGE; 3 minors fixed (dead
+  #settings-btn CSS, signed-out Settings focus, Escape closes account
+  menu). One Important caught by screenshot before review: #signin-row's
+  display:flex overrode [hidden] — both rows rendered at once.
+- New gate `scripts/e2e_account.py` (fragment consumption + scrub, avatar/
+  label, sign-out key clearing, signed-out send → app-login redirect,
+  Advanced manual key → "Connected").
+
+### Verification — PASS (all against live prod)
+- ACCOUNT E2E on https://claude.comparegpt.io; PROJECTS + WEB SEARCH +
+  VOICE e2e on the prod build; 27 pytest; LIVE VOICE retest with temp key;
+  MOBILE LIVE TEST all-PASS; real cross-site flow: Sign in on Claude →
+  token.comparegpt.io/login?...method=pwm renders Google + Physics World
+  Model options; unauthenticated app-login 302 verified.
+- Deploys: claude_ui_pwm (cache-bust `v=d7d2d0f3` → final build after
+  voice fix), token-backend (email-fragment code now live).
+- Pushed: Claude_UI_PWM `563385e..24d1063`; token already on origin/main.
+
+### What still needs a human
+A real Google/PWM login through token.comparegpt.io on Claude (headless
+cannot pass Google auth), and hearing actual TTS audio on a real device.
