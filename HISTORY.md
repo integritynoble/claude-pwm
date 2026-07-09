@@ -1411,3 +1411,56 @@ Pushed `d4d0510..1aa5401`.
 
 ### Parity scoreboard
 **Memory: ✅ done.** Last remaining subsystem: Connectors/MCP.
+
+---
+
+## 2026-07-09 — Connectors/MCP shipped — ALL claude.ai subsystems now at parity
+
+### Request
+"Implement the Connectors/MCP." (the last remaining subsystem)
+
+### Feasibility discovery
+Anthropic's server-side **MCP connector** (`mcp_servers` param + beta
+`mcp-client-2025-04-04`) passes through the PWM exchange: a temp-key test
+against the public DeepWiki MCP server streamed `mcp_tool_use` →
+`mcp_tool_result` (no error) and a grounded answer. Anthropic connects to
+the MCP server and runs tools server-side — no client MCP protocol, no
+CORS.
+
+### What was built (commit `8193e40`, spec `2026-07-09-connectors-mcp-design.md`)
+- **Settings → Connectors tab** (6th tab): add up to 5 remote MCP servers
+  (name, https URL, optional bearer token), per-server enable toggle,
+  delete; trust-caution copy. Stored **device-local only**
+  (`claude_pwm_connectors` — tokens are credentials, never synced);
+  cleared on sign-out. OAuth connector flows out of scope v1.
+- `chat.py`: validates + forwards `mcp_servers` ({type:url, name, url,
+  authorization_token?}, https-only, ≤5) and comma-merges
+  `mcp-client-2025-04-04` into the beta header alongside research's
+  web-fetch beta. 4 new pytest (42 total).
+- Stream rendering: `mcp_tool_use` → "<server>: <tool>… → Used <server>:
+  <tool>" chips; `mcp_tool_result` with `is_error` flips to "… failed";
+  persisted as `{kind:'mcp', label}` like search chips. No message
+  content-model changes (server-side blocks, like web search).
+- Gate `scripts/e2e_connectors.py`: CRUD + validation, wire payload,
+  chip lifecycle incl. failed tool, saved re-render, disable ⇒ no
+  mcp_servers, sign-out clears.
+
+### Live smoke on prod — PASS (temp key, deleted)
+Added DeepWiki via the real Settings UI → asked about
+anthropics/claude-code → "Used deepwiki: ask_question" chip and a reply
+quoting the repo's actual description, in 17.3 s.
+
+### Verification — PASS (final build `app.js?v=fb07816c`)
+All **11 e2e gates** + 42 pytest + mobile sweep green against live prod.
+(One transient flake mid-suite: retry-model gate timed out on a fresh dev
+server, passed solo — same environmental class as before.)
+Pushed `1aa5401..8193e40`.
+
+### PARITY SCOREBOARD — COMPLETE
+Every claude.ai subsystem tracked since audit #1 (2026-06-28) is now
+shipped and live-verified: streaming chat, model picker + retry model
+switch, thinking, attachments (+paste/drop), artifacts, share/export,
+projects, styles, voice conversation, web search, Research mode, analysis
+tool (code execution), file creation (csv/xlsx/docx/pdf), Memory, and
+Connectors/MCP. Deliberate divergences unchanged: PWM sign-in flow,
+per-key billing choice, Settings button/account row.
