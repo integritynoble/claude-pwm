@@ -1522,3 +1522,36 @@ creation. Each noted in its spec.
 ### Verification — PASS (deployed `app.js?v=eb21ed7c`)
 web-search (incl. share round-trip) + analysis gates and the mobile sweep
 green against live prod; 45 pytest. Pushed `991da85..9da7ce4`.
+
+---
+
+## 2026-07-09 (follow-up) — Research re-test caught a real bug: pause_turn now handled
+
+### What happened
+The requested Research re-test on prod FAILED usefully: the run did real
+work (4 searches + 5 page reads, 33 sources gathered) but ended at 79 s
+with a 1.7k-char headingless fragment — the API returned **stop_reason:
+pause_turn** (Anthropic pauses long server-tool turns and expects the raw
+assistant turn back to continue). Our client treated any message_stop as
+done. The two earlier live research runs simply never paused.
+
+### Fix (commit `6fb786a`)
+`streamAssistantResponse` now reconstructs raw content blocks from the
+stream (text, thinking + signature, tool blocks with accumulated input
+JSON, citations) and, on pause_turn, appends the raw assistant turn to an
+API-only continuation list and re-requests — streaming into the SAME
+visible reply, up to 3 continuations. Tool/search block state keys are
+round-scoped to avoid index collisions across continuations. Research e2e
+gained a pause_turn scenario (asserts the continuation request carries
+the raw server_tool_use turn and the reply stays one bubble).
+
+### Re-test on the fixed build — PASS
+3 searches + 4 full-page reads (platform.claude.com), 27 sources,
+**14-heading report of ~13.8k chars in 69 s**; chips + sources re-render
+after reload. Full regression (web-search incl. share round-trip,
+analysis, memory, connectors, voice) + 45 pytest green; deployed and
+pushed `9da7ce4..6fb786a`.
+
+### Test-authoring note
+`page.unroute(pattern)` without the handler argument removes ALL handlers
+for the pattern — pass the specific handler when stacking stub routes.
