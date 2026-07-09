@@ -1207,3 +1207,37 @@ Pushed `5dbb78f..7a4a231`.
 Python execution is a follow-up if Anthropic container quota appears on
 the exchange credential). Remaining subsystems: file creation
 (docx/xlsx), Research mode, Memory, Connectors/MCP.
+
+---
+
+## 2026-07-09 (follow-up) — First-class PWM API key choice (direct per-key billing)
+
+### Request
+"Provide PWM API key choice — if users provide one PWM API key, the cost
+comes from the PWM API key directly."
+
+### Finding
+Billing already worked that way: every `/api/chat/stream` call bills
+whatever `sk-pwm-` key the browser holds (SSO-minted or pasted). The gap
+was visibility — the account-sign-in redesign had buried the key path in a
+collapsed "Advanced" section.
+
+### What changed (commit `b9d2c24`)
+- Settings → Account now shows two side-by-side options when signed out:
+  **Continue with token.comparegpt.io** and **Use a PWM API key** (opens +
+  focuses the key field, retitled from "Advanced" to "PWM API key").
+- Copy states the billing rule explicitly: field description "Usage is
+  billed directly to this key's PWM balance"; connected status reads
+  "Connected with a PWM API key — usage is billed to this key."
+- Landing reminder offers both paths: sign in **or** "use a PWM API key"
+  (opens Settings with the field revealed).
+
+### Verification — PASS
+- Account e2e extended (choice button reveals+focuses field, billing
+  status copy, reminder link opens Settings with field open) — PASS on
+  the prod edge; full regression suite + 32 pytest green; mobile sweep
+  PASS. Cache-bust `app.js?v=48c1a7ee`. Pushed `7a4a231..b9d2c24`.
+- Live billing proof on prod: walked the visible key-choice path with a
+  temp key, chatted ("KEY BILLING OK", 3.5 s), and confirmed the key row's
+  `last_used_at` was stamped — the provided key was the authenticated
+  billing identity for the call. Key deleted after.
