@@ -1464,3 +1464,33 @@ projects, styles, voice conversation, web search, Research mode, analysis
 tool (code execution), file creation (csv/xlsx/docx/pdf), Memory, and
 Connectors/MCP. Deliberate divergences unchanged: PWM sign-in flow,
 per-key billing choice, Settings button/account row.
+
+---
+
+## 2026-07-09 (follow-up) — "Response is so slow" → prompt caching shipped
+
+### Diagnosis
+At measurement time the chain was fast (2.4 s minimal, ~3 s with all
+default tools end-to-end), so the slowness is episodic with two causes:
+1. **Host/exchange contention**: 4-core host at load 8–10; the exchange
+   container (`pwm_nonprofit-app-1`) at 46% CPU (its uvicorn had restarted
+   at 19:02 under load from other tenants + a QA process). Transient;
+   not this repo's code.
+2. **Structural (ours, fixed)**: no prompt caching — every turn of a long
+   conversation, and every analysis/memory tool round (each reply with a
+   tool call = 2+ sequential full requests), re-processed the entire
+   prefix (tools + system + history) from scratch.
+
+### Fix (commit `991da85`)
+Ephemeral cache breakpoints in `chat.py`: the last system block (covers
+tools + system) and the last message's final content block (so the next
+turn / tool round reuses the whole history). 3 new pytest (45).
+**Live verification through the exchange:** call 1
+`cache_creation_input_tokens: 4024`, call 2 `cache_read_input_tokens:
+4024` — the shared subscription credential supports caching end-to-end.
+Key gates re-run green on the deployed build; pushed `8193e40..991da85`.
+
+### Note
+The stray dev-server process from testing was killed. If slowness recurs
+while `/healthz` is fast, check host load and the exchange container's
+CPU first (same triage as 2026-07-04).
