@@ -1106,3 +1106,37 @@ requested. Deliberate divergences unchanged: PWM sign-in flow
 (token.comparegpt.io), Advanced API-key fallback in Settings.
 Possible next small parity item: claude.ai's Retry offers a model-switch
 dropdown; PWM Retry is plain.
+
+---
+
+## 2026-07-09 — Retry model-switch popover (claude.ai parity)
+
+### Request
+"Add the retry model-switch dropdown" (the follow-up noted in audit #4).
+
+### What was built (commit `5dbb78f` on `Claude_UI_PWM` master)
+Retry under an assistant reply no longer regenerates immediately — it opens
+a `#retry-menu` popover (fixed-position by the button, flips upward when
+there is no room below, clamped to the viewport) listing all models with
+the conversation's current model checked. Reuses the existing
+`.model-option` styles and `MODEL_DESCRIPTIONS`. Picking a model:
+- switches `modelSelect` + topbar/composer labels (`syncModelLabel`),
+- persists the choice to the conversation (`persistConvSettings`),
+- regenerates the reply from that point (`regenerate`).
+Escape, outside click, and transcript scroll dismiss it; Escape entry added
+at the top of the shared Escape chain.
+
+### Verification — PASS (live production build)
+- New gate `scripts/e2e_retry_model.py`: menu opens without regenerating,
+  current model checked, Escape closes cleanly, picking Opus 4.8 sends
+  `model: claude-opus-4-8` with the old reply dropped, new reply renders,
+  topbar label follows.
+- Full regression: ATTACH+STAR / PROJECTS / WEB SEARCH / VOICE on 8103,
+  ACCOUNT on the prod edge, 29 pytest.
+- Cache-bust `app.js?v=eff8d6ec`; prod + dev healthz 200.
+- Pushed `58401e4..5dbb78f`.
+
+### Parity scoreboard
+Retry model-switch: ✅ done. Remaining gaps are the platform subsystems
+(code execution/analysis, file creation, Research mode, Memory,
+Connectors/MCP) — deliberate multi-session builds if requested.
