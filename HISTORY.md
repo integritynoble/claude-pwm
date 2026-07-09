@@ -1059,3 +1059,50 @@ Claude side (merge `a7d59f5`, branch rebased onto current master):
 ### What still needs a human
 A real Google/PWM login through token.comparegpt.io on Claude (headless
 cannot pass Google auth), and hearing actual TTS audio on a real device.
+
+---
+
+## 2026-07-08/09 — Parity audit #4: paste/drop attachments, starred chats, no timestamps
+
+### Request
+"Ensure the Claude of PWM has the same function and usage experience with
+the Claude from Anthropic." (standing mission — audit #4)
+
+### Audit result
+Health: prod + dev 200, upstream reachable, container up 4 days (last
+session's build). All **13 feature markers** live in prod HTML (projects,
+model picker, voice btn + mode + overlay, think, search, style, token
+reminder, account row, signin row, sidebar scrim, advanced key).
+
+Three usage-experience gaps vs claude.ai found and closed
+(spec `2026-07-08-parity-audit4-design.md`, commit `58401e4`):
+
+| Gap | Fix |
+|-----|-----|
+| **No paste / drag-drop attach** — only the paperclip existed; pasting a screenshot is claude.ai's most common attach flow | Shared `addAttachFiles()` (type/size/count validation from the file-input rules); document-level paste handler; dragenter/over/leave/drop on `#conversation` with a `drag-active` composer accent; unsupported types → error toast |
+| **No starred chats** | Star hover-button on sidebar rows (filled + accent when starred); Starred section renders above Recents (labels now rendered dynamically inside `#chat-list`); flag carried through saveCurrentChat / renameChat / persistConvSettings / sync re-upload PUTs; server `starred` column via the existing migration loop, PUT/GET round-trip, `tests/test_conversations_starred.py` |
+| **Per-message timestamps** — claude.ai's transcript has none | `.msg-time` + `addTimestamp()`/`formatTime()` removed (stored `ts` metadata kept) |
+
+### Regression caught by the gates
+Adding a 4th invisible hover button made `.chat-item` clicks land on
+`opacity:0` action buttons (stopPropagation → chat never opened; Playwright
+caught it, real users could hit it too). Fix: `#chat-list .chat-item-act`
+is `pointer-events:none` until the row is hovered/focus-within. First
+attempt applied that to `.chat-item-act` globally and broke project-card
+delete (shared class) — scoped to the sidebar list. Tests now click
+`.chat-item-title`.
+
+### Verification — PASS (live prod build)
+29 pytest; ATTACH+STAR + PROJECTS + WEB SEARCH + VOICE e2e on 8103;
+ACCOUNT e2e on the prod edge; MOBILE LIVE TEST all-PASS at 390×844.
+Cache-bust `app.js?v=aae0445a`; prod + dev healthz 200.
+Pushed `24d1063..58401e4`.
+
+### Parity scoreboard after audit #4
+Everyday usage surfaces are at parity. Remaining known gaps are the
+platform subsystems (code execution/analysis, file creation, Research
+mode, Memory, Connectors/MCP) — each a deliberate multi-session build if
+requested. Deliberate divergences unchanged: PWM sign-in flow
+(token.comparegpt.io), Advanced API-key fallback in Settings.
+Possible next small parity item: claude.ai's Retry offers a model-switch
+dropdown; PWM Retry is plain.
