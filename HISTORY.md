@@ -1241,3 +1241,48 @@ collapsed "Advanced" section.
   temp key, chatted ("KEY BILLING OK", 3.5 s), and confirmed the key row's
   `last_used_at` was stamped — the provided key was the authenticated
   billing identity for the call. Key deleted after.
+
+---
+
+## 2026-07-09 — File creation shipped (createFile + vendored libs, claude.ai parity)
+
+### Request
+"Implement the file creation."
+
+### Architecture (spec `2026-07-09-file-creation-design.md`)
+Extends the analysis-tool sandbox — zero backend, no upstream quota:
+- **`createFile(name, content)`** in the repl worker collects downloadables
+  (string or Uint8Array/ArrayBuffer; 10 files / 20 MB per run).
+- **`loadLibrary('xlsx'|'docx'|'jspdf')`**: whitelist-only same-origin
+  importScripts of vendored libs (`static/vendor/`: SheetJS 0.18.5,
+  docx 9.0.3, jsPDF 2.5.2, ~2 MB total, loaded only on demand) → real
+  .xlsx/.docx/.pdf. Network stays disabled in the sandbox.
+- **File cards** (icon, name, size, Download) render under the reply, live
+  and from saved conversations. Files ≤300 KB persist as base64 on the
+  message (survives reload + sync); larger are session-only with an
+  "Expired — ask Claude to create it again" card (mirrors claude.ai's
+  expiring files). tool_result gains "Created file: …" lines.
+- Tool description documents the contract with xlsx/docx/pdf examples.
+
+### Debugging worth remembering
+1. docx's UMD bundle failed ONLY in the sandbox: its bundled setimmediate
+   detects workers via `typeof importScripts`; our sandbox set it to
+   `undefined`, so it probed `postMessage('', '*')` → "Overload resolution
+   failed". Fix: importScripts becomes a **throwing stub**, not undefined.
+2. docx `Packer.toBuffer` is Node-only ("nodebuffer is not supported") —
+   browsers must use `Packer.toBlob`; baked into the tool description.
+3. docx@8.5.0 and @9.5.1 have no build/index.umd.js on jsdelivr; 9.0.3 does.
+
+### Verification — PASS (deployed build `app.js?v=80c6b6d8`)
+- `scripts/e2e_file_creation.py`: stubbed SSE + REAL worker — CSV card
+  content byte-exact, xlsx/docx produce PK zip magic and pdf %PDF inside
+  the worker, ≤300 KB file survives reload, >300 KB shows expired card.
+- Live smoke on prod (temp key, deleted): real model created planets.csv
+  (verified content) + real 16 KB planets.xlsx (PK magic) in 8.6 s.
+- All 8 e2e gates + 32 pytest + full mobile sweep green on the final
+  build. Pushed `b9d2c24..19ba3bf`.
+
+### Parity scoreboard
+**File creation: ✅ done** (docx/xlsx/pdf via vendored libs; text formats
+native; pptx out of scope — no solid client lib). Remaining subsystems:
+Research mode, Memory, Connectors/MCP.
