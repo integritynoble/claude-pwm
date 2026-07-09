@@ -1286,3 +1286,56 @@ Extends the analysis-tool sandbox — zero backend, no upstream quota:
 **File creation: ✅ done** (docx/xlsx/pdf via vendored libs; text formats
 native; pptx out of scope — no solid client lib). Remaining subsystems:
 Research mode, Memory, Connectors/MCP.
+
+---
+
+## 2026-07-09 — Research mode shipped (web_search ×20 + web_fetch + research contract)
+
+### Request
+"Implement the Research mode."
+
+### Feasibility discovery
+Anthropic's server-side **`web_fetch_20250910`** (beta
+`web-fetch-2025-09-10`) passes through the PWM exchange like web search:
+temp-key test streamed `server_tool_use` → `web_fetch_tool_result` with a
+full document. So Research is a **single-request** feature — no
+orchestration layer.
+
+### What was built (commit `2a13aeb`, spec `2026-07-09-research-mode-design.md`)
+- `chat.py` `research: true`: web_search max_uses **20** (supersedes the
+  standard 5) + web_fetch max_uses **10**; `anthropic-beta:
+  web-fetch-2025-09-10` header; max_tokens 16000; `<research-mode>` system
+  block (sub-questions, several distinct searches, read key pages in full,
+  cross-check sources, structured report + Sources). 3 new pytest (35).
+- Composer **Research** toggle (compass icon, off by default,
+  `claude_pwm_research`).
+- Stream rendering: `server_tool_use` handler is name-aware — web_fetch
+  renders "Reading a page… → Read <host>" chips; fetched URLs join the
+  Sources section; fetch errors show "Page unavailable". `searches`
+  persistence now carries `{kind:'fetch', label}` objects beside legacy
+  strings.
+- Mobile: six chips can't share a 390 px row — composer action rows wrap.
+- Gate `scripts/e2e_research.py`: toggle persistence + wire flag, both
+  chip kinds live and from saved conversations, fetched URL in Sources,
+  390 px nine-control no-overlap check.
+
+### Live smoke on prod — PASS (temp key, deleted)
+"Key announcements from Anthropic in H1 2026", Research on: **10 distinct
+searches + 1 full-page read (anthropic.com), 76 sources, an 11-heading
+structured report of ~21 000 chars, in 71 s.** First attempt stalled with
+no visible tool activity (the original test never read the error banner —
+upstream hiccup); identical rerun with banner capture worked first try.
+
+### Flake root cause finally caught
+`e2e_projects` intermittent failures = **transient upstream 502s** on the
+fake-key request: the error banner ("Error 502: <!DOCTYPE html>…")
+overlays the transcript and intercepts hovers. Environmental, not a code
+regression; passes on rerun. Consider a dismissible/auto-hiding banner as
+a future UX fix.
+
+### Verification — PASS (final build `app.js?v=2d62bab8`)
+All 9 e2e gates + 35 pytest + mobile sweep green against live prod
+(projects gate green on rerun after the 502). Pushed `19ba3bf..2a13aeb`.
+
+### Parity scoreboard
+**Research mode: ✅ done.** Remaining subsystems: Memory, Connectors/MCP.
