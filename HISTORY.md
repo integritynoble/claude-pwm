@@ -1339,3 +1339,23 @@ All 9 e2e gates + 35 pytest + mobile sweep green against live prod
 
 ### Parity scoreboard
 **Research mode: ✅ done.** Remaining subsystems: Memory, Connectors/MCP.
+
+---
+
+## 2026-07-09 (follow-up) — Research mode live test #2 + composer label fix
+
+### Live test on prod (temp key, deleted) — PASS
+"Research the current Claude model lineup… read Anthropic's official pages
+where possible": **4 searches + 4 full-page reads (anthropic.com,
+platform.claude.com ×2), 36 sources, 13-heading report (~11.8k chars) in
+63 s.** The model wrote its own Sources section grounded in official pages
+and noted where third-party sources were used only for cross-checks.
+Persistence verified: reload → all 8 activity chips (both kinds) + 36
+sources re-render. First attempt hit a transient upstream connection error;
+the built-in retry ran clean.
+
+### Regression found by the test's screenshot (fixed, `d4d0510`)
+Six composer chips crowded the model label into the voice buttons at
+1280 px. `.composer-model` now shrinks with ellipsis and the action row may
+wrap; overlap-checked at 1280/1024/900 px and the mobile sweep. Deployed
+`app.js?v=9f229fd7`; research + web-search + voice gates re-run green.
