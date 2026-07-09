@@ -1359,3 +1359,55 @@ Six composer chips crowded the model label into the voice buttons at
 1280 px. `.composer-model` now shrinks with ellipsis and the action row may
 wrap; overlap-checked at 1280/1024/900 px and the mobile sweep. Deployed
 `app.js?v=9f229fd7`; research + web-search + voice gates re-run green.
+
+---
+
+## 2026-07-09 — Memory shipped (model-curated, synced, user-editable)
+
+### Request
+"Implement the Memory."
+
+### Architecture (spec `2026-07-09-memory-design.md`, commit `1aa5401`)
+Memory is model-curated on the existing client-tool loop (the analysis-tool
+machinery paid off again):
+- **`memory` client tool** (`memory: true` chat flag): add/update/delete
+  with a sparing-use contract (durable useful facts only; sensitive info
+  only on explicit request). Dispatch by tool name: `repl` → sandbox,
+  `memory` → `applyMemoryAction()`.
+- **Injection:** `buildSystemPrompt()` adds `<user-memories>` ("[id]
+  content" lines) when enabled and non-empty.
+- **Chat UI:** "Updating memory… → Memory updated/deleted" chips (search-
+  chip style, persisted as `{kind:'memory', label}` in `searches`); no
+  Analysis block for memory calls (saved tool_use rendering filters to
+  `name === 'repl'`).
+- **Storage/sync:** `claude_pwm_memories` (100×500 caps) + new
+  `/api/memories` (whole-list GET/PUT, key-hash auth, 64 KB body cap,
+  per-entry updatedAt merge at boot). Sign-out clears local; sign-in
+  restores. 3 new pytest (38 total).
+- **Settings → Personalization:** Memory toggle (default on,
+  `claude_pwm_memory_enabled`), inline-editable list (click to edit,
+  Enter/blur commits, Escape cancels), per-row delete, Clear all.
+  Toggle off ⇒ no tool + no injection; memories kept dormant.
+
+### Test-authoring catches worth remembering
+- Stub SSE selection by `len(bodies)` breaks after `bodies.clear()` — the
+  tool SSE got served twice and duplicated a memory. Use a persistent
+  request counter in route stubs.
+- `.toggle-switch input` is visually hidden (opacity 0) — Playwright must
+  click it programmatically or via the slider.
+- Boot now does one extra fetch (/api/memories) — tightened e2e waits
+  (2.5 s → 4 s) for the tool-loop gates.
+
+### Live smoke on prod — PASS (temp key, deleted; memories wiped after)
+Chat 1 "remember: my favorite testing city is Ulaanbaatar" → model called
+the memory tool, chip shown, stored as "User's favorite testing city is
+Ulaanbaatar.", server copy verified. **Brand-new chat 2**: "What is my
+favorite testing city? One word" → **"Ulaanbaatar"** in 3.2 s, recalled
+purely from the injected memories.
+
+### Verification — PASS (final build `app.js?v=3b4a8428`)
+All 10 e2e gates + 38 pytest + mobile sweep green against live prod.
+Pushed `d4d0510..1aa5401`.
+
+### Parity scoreboard
+**Memory: ✅ done.** Last remaining subsystem: Connectors/MCP.
