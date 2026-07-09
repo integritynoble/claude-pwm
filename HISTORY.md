@@ -1140,3 +1140,70 @@ at the top of the shared Escape chain.
 Retry model-switch: ✅ done. Remaining gaps are the platform subsystems
 (code execution/analysis, file creation, Research mode, Memory,
 Connectors/MCP) — deliberate multi-session builds if requested.
+
+---
+
+## 2026-07-09 — Analysis tool shipped (client-side code execution, claude.ai parity)
+
+### Request
+"Implement the code execution." (the largest remaining parity subsystem)
+
+### Feasibility discovery (drove the architecture)
+Anthropic's server-side code execution (`code_execution_20250825`, beta
+`code-execution-2025-08-25`) DOES pass through the PWM exchange — it merges
+the client's `anthropic-beta` header upstream (`exchange_proxy.py:290`);
+live temp-key tests streamed real `server_tool_use`
+(`bash_code_execution` / `text_editor_code_execution`) blocks. **But the
+sandbox is persistently `too_many_requests`** on the shared subscription
+OAuth credential (no container quota; retried across 90s+). Building on it
+would ship a dead button — so the feature is the thing claude.ai's analysis
+tool actually is: a **client-side JavaScript REPL**.
+
+### What was built (commits `337e8d5` + CSS fixes `c959ef3`,`7a4a231`;
+spec `2026-07-09-analysis-tool-design.md`)
+- `routers/chat.py`: `analysis: true` adds a `repl` **client tool**
+  (composes with web_search in one `tools` array). 3 new pytest.
+- Tool loop in `app.js`: `tool_use` blocks collected from the stream
+  (`input_json_delta` accumulation), `stop_reason` tracked; on a
+  `tool_use` stop the code runs in a **sandboxed blob Web Worker**
+  (fetch/XHR/WebSocket/EventSource/importScripts removed, console
+  captured, final expression appended as `=> value`, 30 s timeout, fresh
+  worker per run, 10 k output cap), a `tool_result` user message goes
+  back, and the stream continues — **max 5 rounds** per turn. Assistant
+  messages with tool calls store block-array content; pure tool_result
+  user messages never render as bubbles.
+- UI: collapsible **Analysis** blocks (highlighted JS + console pane,
+  error styling) live and re-rendered from saved conversations
+  (outputs paired from the following tool_result message); composer
+  **Analysis** toggle beside Search (on by default,
+  `claude_pwm_analysis`), icon-only on mobile.
+- Gate `scripts/e2e_analysis.py`: stubbed two-round stream with REAL
+  worker execution (asserts "42" computed in-browser and carried in the
+  second request), saved-render after reload, toggle-off wire check.
+
+### Live smoke on prod — PASS (temp key, deleted after)
+Real Sonnet 5 called `repl` at +4.4 s with generated loop code; the
+browser worker returned `=> 5525` (sum of squares 1..25); the model
+answered "5525" at +8.6 s. Two requests on the wire, tool_result verbatim.
+
+### Regressions caught while shipping
+- Analysis chip's appended base CSS overrode the earlier mobile media
+  block (same specificity, later wins) → chip overlapped voice button at
+  390 px; fixed with a trailing media override.
+- The style chip moved right of center on phones → its `left:0` popover
+  went off-screen; right-anchored on mobile.
+- `e2e_projects` flaked twice right after dev-server restarts
+  (`.project-chat-item` timeout), then passed consistently solo, paired,
+  and in-suite; watch for recurrence.
+
+### Verification — PASS (final deployed build `app.js?v=9cddcb71`)
+All 7 e2e gates (analysis, attach+star, retry-model, projects, web
+search, voice, account-on-edge) + 32 pytest + full mobile sweep at
+390×844 against live prod; prod + dev healthz 200.
+Pushed `5dbb78f..7a4a231`.
+
+### Parity scoreboard
+**Code execution / analysis tool: ✅ done** (client-side; server-side
+Python execution is a follow-up if Anthropic container quota appears on
+the exchange credential). Remaining subsystems: file creation
+(docx/xlsx), Research mode, Memory, Connectors/MCP.
