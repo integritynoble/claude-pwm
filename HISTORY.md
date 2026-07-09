@@ -1494,3 +1494,31 @@ Key gates re-run green on the deployed build; pushed `8193e40..991da85`.
 The stray dev-server process from testing was killed. If slowness recurs
 while `/healthz` is fast, check host load and the exchange container's
 CPU first (same triage as 2026-07-04).
+
+---
+
+## 2026-07-09 (follow-up) — Audit #5 polish: share pages reach parity
+
+### Request
+"Please continue to make it the same as Claude from Anthropic."
+
+### What was closed (commit `9da7ce4`)
+With all subsystems shipped, audit #5 targeted the outstanding accepted
+follow-ups. Share pages (and Markdown export) were the visible gap:
+- Share pages now render activity chips (Searched/Read/Memory) and the
+  **Sources section** the citation `[n]` markers point to.
+- Share pages no longer show per-message timestamps (removed from the app
+  in audit #4) nor empty bubbles for analysis-loop tool_result plumbing.
+- Markdown export appends numbered source links per assistant message and
+  skips tool plumbing.
+- Web-search e2e extended with a real share-link round-trip (create link →
+  visit → chips + sources + no timestamps).
+
+### Still-open accepted items (small, deliberate)
+Zero-result search reads "Search unavailable"; Sources numbering counts
+uncited results; browser-TTS voice quality; OAuth connector flows; pptx
+creation. Each noted in its spec.
+
+### Verification — PASS (deployed `app.js?v=eb21ed7c`)
+web-search (incl. share round-trip) + analysis gates and the mobile sweep
+green against live prod; 45 pytest. Pushed `991da85..9da7ce4`.
