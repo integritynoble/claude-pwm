@@ -1555,3 +1555,36 @@ pushed `9da7ce4..6fb786a`.
 ### Test-authoring note
 `page.unroute(pattern)` without the handler argument removes ALL handlers
 for the pattern — pass the specific handler when stacking stub routes.
+
+---
+
+## 2026-07-10 — Audit #6: pptx creation, no-results label, Export all data
+
+### Request
+"Please continue to make it the same as Claude from Anthropic."
+
+### What was closed (commit `576ff25`)
+Three of the remaining accepted follow-ups:
+1. **pptx creation** — previously written off as "no solid client lib";
+   PptxGenJS 3.12 (vendored, 477 KB) proved worker-compatible on a
+   feasibility probe (real PK bytes). `loadLibrary('pptx')` added to the
+   sandbox + tool description. **Live prod smoke: real model built
+   quarterly.pptx (51 KB) with a title slide and a bullet slide —
+   verified ppt/presentation.xml + slide1/slide2.xml inside the zip.**
+   File creation now covers csv/xlsx/docx/pdf/pptx — full parity.
+2. **Zero-result searches** now read "No results found" (errors keep
+   "Search unavailable").
+3. **Export all data** in Settings → Data controls: conversations +
+   projects + memories as one JSON download (claude.ai data-export
+   parity).
+Gates extended (pptx worker probe in file-creation e2e; export download
+check in attach_star e2e); 45 pytest; deployed and pushed
+`6fb786a..576ff25`.
+
+### Dev-loop gotcha (recorded)
+`routers/pages.py` caches the version-stamped index.html **at import** —
+markup edits after a dev-server start are not served until restart.
+
+### Remaining accepted divergences
+Browser TTS voice quality; OAuth connector flows; Sources numbering
+counts uncited results (breaking it would desync [n] markers).
