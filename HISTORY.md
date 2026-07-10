@@ -1700,3 +1700,34 @@ stubbed same-origin e2e (no COOP) — only the live provider exposed it.
   stored (earlier run). Backend validation → 400 via curl.
 - Gates + 6 mcp_oauth pytest green; pushed `52ce29f..c3b77e6`.
 The only unautomatable leg remains the human Approve click at the provider.
+
+---
+
+## 2026-07-10 — Audit #8: response version history (‹ n/m › navigator)
+
+### Audit finding
+Sidebar search already covers message content (no gap). Real gap: **Retry
+discarded the previous answer** — claude.ai keeps prior responses and shows
+a ‹ n/m › navigator to flip between them.
+
+### What was built (commit `b3f425f`)
+Retrying the last reply folds the previous version(s) + the new one into a
+single message with `versions[]` + `vi`; a ‹ n/m › navigator (CSS
+`.version-nav`) flips between them. The selected version is the one that
+rides future requests as history (verified) and persists through storage/
+sync (`stripForStorage` carries `versions`/`vi`). Bounded to retries of the
+LAST message — mid-conversation retry still truncates (full subtree
+branching out of scope). New gate `scripts/e2e_versions.py`
+(create → 2/2 → 3/3 → flip to 1/3 → active-version-in-history → reload).
+
+### Verification — PASS (deployed `app.js?v=3c3a621d`)
+- Gate green on prod build; mobile sweep + 51 pytest green.
+- **Live with a real model**: asked for a quote → v1 "The only way to fail
+  is to stop trying."; Retry → v2 "…do great work is to love what you
+  do." (nav 2/2); ‹ flips back to v1 (nav 1/2), content restored exactly.
+- Pushed `c3b77e6..b3f425f`.
+
+### Parity status
+Response versioning was the last clearly-visible interaction gap. Residual
+deliberate divergences: mid-conversation retry branching (rare), browser
+TTS voice quality, sources numbering counts uncited results.
