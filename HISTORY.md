@@ -1769,3 +1769,38 @@ sandbox console error in tests.
 ### Parity status
 Artifact versioning was the last clearly-visible feature gap analogous to
 response versioning (audit #8). Both now match claude.ai.
+
+---
+
+## 2026-07-10 — Audit #10: text / code / CSV / spreadsheet file attachments
+
+### Gap
+The composer accepted only images + PDFs; claude.ai reads attached text,
+code, CSV, JSON, and spreadsheet files. (Projects had knowledge upload, but
+the composer paperclip/paste/drop did not.)
+
+### What was built (commit `3c5e88b`)
+`addAttachFiles` now handles text-family files (txt, md, csv, tsv, json,
+xml, yaml, html, svg, and ~30 code extensions) via `File.text()`, and
+xlsx/xls via the vendored SheetJS lazy-loaded on the main thread
+(sheet_to_csv). The sent message shows a **named file chip** (content is
+NOT dumped into the bubble); each file rides the API as a
+`<file name="…">…</file>` text block (new `file_text` block type →
+converted in `sanitizeForApi`, kept by `stripForStorage`, rendered as a
+chip, excluded from `textOf`). Capped 200k chars/file. Accept list on
+`#file-input` broadened. Images + PDFs keep the base64 vision path.
+
+### Verification — PASS (deployed `app.js?v=fc9abe82`)
+- `scripts/e2e_text_attach.py`: csv + code attach, chip-not-content
+  render, `<file>`-wrapped request, binary rejection. `e2e_attach_star`
+  updated (txt now supported; .bin rejected). 51 pytest; regression +
+  mobile sweep green.
+- **Live with a real model**: attached a salaries CSV → "salaries.csv"
+  chip (no raw CSV in the bubble) → asked highest salary → **"Carol has
+  the highest salary at $162,000."** in 3.2 s. Screenshot captured.
+- Pushed `71135a8..3c5e88b`.
+
+### Note
+docx *reading* not added (would need a new parser lib; the vendored docx
+is write-only). Text extraction covers the common cases; docx/pptx reading
+is a possible future add.
