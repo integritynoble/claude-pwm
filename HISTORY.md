@@ -1669,3 +1669,34 @@ Every claude.ai subsystem AND the previously-deferred connector OAuth are
 now shipped and (as far as automation allows) live-verified. No known
 functional gaps remain. Residual micro-divergences (documented): browser
 TTS voice quality, sources numbering counts uncited results.
+
+---
+
+## 2026-07-10 (follow-up) — Connector OAuth live test caught a COOP bug (fixed)
+
+### The test earned its keep
+Driving the real flow on prod: clicking "Add & sign in" for Linear opened
+a popup that landed on the **genuine Linear consent screen** — "Claude PWM
+is requesting access", Redirect URIs `https://claude.comparegpt.io/mcp/
+callback`, Read/Write — via a real dynamically-registered client + S256
+PKCE. Screenshot captured.
+
+### Real bug found + fixed (commit `c3b77e6`)
+The provider authorize page sets **Cross-Origin-Opener-Policy**, which
+severs `window.opener`. The callback's `postMessage(opener, …)` therefore
+delivered nothing — sign-in would have silently never completed for any
+COOP provider (most of them). Fix: the callback now writes the result to
+**same-origin localStorage** (opener listens via the `storage` event + a
+500 ms poll); postMessage kept as a fast path. This is invisible to the
+stubbed same-origin e2e (no COOP) — only the live provider exposed it.
+
+### Verification — PASS (deployed)
+- A. Real Linear authorize page + real DCR client_id + S256 PKCE + correct
+  resource/redirect/state.
+- B. **COOP-proof delivery**: with `/finish` stubbed (the human-consent
+  code is the only unautomatable step), the real callback page delivered
+  the token to the opener past COOP → connector stored signed-in.
+- Cancel path (`?error`) → "Connector sign-in failed" banner, no connector
+  stored (earlier run). Backend validation → 400 via curl.
+- Gates + 6 mcp_oauth pytest green; pushed `52ce29f..c3b77e6`.
+The only unautomatable leg remains the human Approve click at the provider.
