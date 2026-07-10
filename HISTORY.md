@@ -1588,3 +1588,36 @@ markup edits after a dev-server start are not served until restart.
 ### Remaining accepted divergences
 Browser TTS voice quality; OAuth connector flows; Sources numbering
 counts uncited results (breaking it would desync [n] markers).
+
+---
+
+## 2026-07-10 — Audit #7: Continue on length-limited replies + neural TTS preference
+
+### Request
+"Please continue to make it the same as Claude from Anthropic."
+
+### What was closed (commit `3bab9d8`)
+1. **Continue button** — replies that hit the output-token limit
+   previously just stopped mid-sentence with no affordance. Now a
+   `stop_reason: max_tokens` renders a Continue button; clicking resends
+   the partial reply as an **assistant prefill** (trailing whitespace
+   trimmed for the API — Anthropic rejects it otherwise) and the
+   continuation streams into the same bubble, re-offering Continue if the
+   limit hits again. New gate `scripts/e2e_continue.py` (button appears,
+   prefill request shape, single-bubble merge, saved-conversation text).
+2. **Neural TTS preference** — voice mode now prefers network voices
+   (`!localService`, e.g. Google/Microsoft neural) over OS-local defaults
+   when the browser exposes them; falls back as before.
+
+### Verification — PASS (deployed `app.js?v=6c14b2dd`)
+Continue gate green against the deployed prod build; voice + analysis +
+web-search gates + 45 pytest + mobile sweep green. Pushed
+`576ff25..3bab9d8`.
+Note: the Continue flow can't be forced live cheaply (server-set
+max_tokens is 8096) — verified via the stubbed gate against the real
+build; the prefill request path is the same one the live API accepts.
+
+### Remaining (each deliberate, documented)
+OAuth connector sign-in (next big build if requested — MCP OAuth 2.1 +
+PKCE + dynamic client registration is browser-implementable), server-side
+neural TTS, sources numbering including uncited results.
