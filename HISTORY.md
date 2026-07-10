@@ -1804,3 +1804,34 @@ chip, excluded from `textOf`). Capped 200k chars/file. Accept list on
 docx *reading* not added (would need a new parser lib; the vendored docx
 is write-only). Text extraction covers the common cases; docx/pptx reading
 is a possible future add.
+
+---
+
+## 2026-07-10 — Audit #11: read .docx and .pptx attachments
+
+### Gap (deferred from audit #10)
+Word/PowerPoint attachments weren't read (the vendored docx lib is
+write-only). claude.ai reads them.
+
+### Feasibility
+Vendored **fflate** (32 KB, lazy-loaded) unzips the OOXML package in the
+browser; text pulls cleanly from the runs. Live probe extracted the full
+docx body and both pptx slides.
+
+### What was built (commit `50bf892`)
+`officeToText(file, kind)`: docx → `word/document.xml` `<w:t>` runs joined
+by paragraph; pptx → each `ppt/slides/slideN.xml` `<a:t>`, slides in order.
+Generalized the vendor lazy-loader (`loadVendor`) shared by xlsx + fflate;
+XML entities unescaped. Stored as a text attachment (named chip,
+`<file>`-wrapped for the model). Accept list gains `.docx,.pptx`.
+
+### Verification — PASS (deployed `app.js?v=20590cf3`)
+- e2e_text_attach extended with a real python-docx file (asserts
+  SECRETWORD_MERIDIAN reaches the request). 51 pytest; regression green.
+- **Live with a real model**: attached report.docx + deck.pptx →
+  "report.docx"/"deck.pptx" chips → asked for the marker words → **"(1)
+  MERIDIAN (2) ORION"** in 3.6 s; no raw text leaked into the bubble.
+- Pushed `3c5e88b..50bf892`.
+
+### Attachment parity now complete
+images, PDF, text/code/csv/json/yaml/xml/svg, xlsx/xls, **docx, pptx**.
