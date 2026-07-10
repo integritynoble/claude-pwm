@@ -1731,3 +1731,41 @@ branching out of scope). New gate `scripts/e2e_versions.py`
 Response versioning was the last clearly-visible interaction gap. Residual
 deliberate divergences: mid-conversation retry branching (rare), browser
 TTS voice quality, sources numbering counts uncited results.
+
+---
+
+## 2026-07-10 — Audit #9: artifact version history
+
+### Gap
+When Claude iterated on an artifact across turns, each became a separate
+card and the panel showed only that one — claude.ai keeps them as versions
+with a ‹ n/m › stepper.
+
+### What was built (commit `71135a8`)
+Artifacts sharing a signature (lang+title) within a conversation are now a
+version stack. Opening one computes the group via `collectArtifacts()`
+(scans stored messages, same extraction criteria as processArtifacts), and
+the panel header shows a ‹ n/m › stepper (works for saved chats too);
+opening a specific card lands on that version. New gate
+`scripts/e2e_artifact_versions.py`.
+
+### Verification — PASS (deployed `app.js?v=f16e9e1a`)
+- Gate green on prod build; 51 pytest; regression green (web-search flaked
+  once on a cold dev-server first request, passed on rerun — known).
+- **Live with a real model**: "minimal HTML with <h1>Hello</h1>" → artifact
+  v1; "change heading to Goodbye" → v2. Panel opened at 2/2, stepping ‹ to
+  1/2 restored the Hello version; v2 contains Goodbye, v1 Hello. Screenshot
+  shows the ‹ 1/2 › stepper in the panel header.
+- Pushed `b3f425f..71135a8`.
+
+### Note
+Grouping is by (lang, title) signature — the model doesn't emit artifact
+IDs, so two unrelated same-language artifacts would merge into one stack
+(rare; non-destructive — you can still step to each). The artifact preview
+iframe stays sandboxed (no allow-same-origin): a generated page touching
+localStorage is correctly blocked, which surfaces as an ignorable
+sandbox console error in tests.
+
+### Parity status
+Artifact versioning was the last clearly-visible feature gap analogous to
+response versioning (audit #8). Both now match claude.ai.
