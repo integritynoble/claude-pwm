@@ -1621,3 +1621,51 @@ build; the prefill request path is the same one the live API accepts.
 OAuth connector sign-in (next big build if requested — MCP OAuth 2.1 +
 PKCE + dynamic client registration is browser-implementable), server-side
 neural TTS, sources numbering including uncited results.
+
+---
+
+## 2026-07-10 — Connector OAuth shipped — the last big parity item
+
+### Request
+"Please implement the connector OAuth."
+
+### Feasibility (proven live)
+Server-side probes of Linear/Notion/Asana confirmed the full RFC chain:
+401 → `WWW-Authenticate: resource_metadata=` (RFC 9728) → protected-
+resource metadata → `authorization_servers` → auth-server metadata
+(authorize/token/**registration** endpoints, S256 PKCE). All three support
+Dynamic Client Registration. Done server-side to dodge browser CORS.
+
+### What was built (commit `52ce29f`, spec `2026-07-10-connector-oauth-design.md`)
+- `routers/mcp_oauth.py`: `/api/mcp/oauth/start` (discover → DCR → PKCE
+  authorize URL, 10-min in-memory flow store keyed by state),
+  `/api/mcp/oauth/finish` (code→token exchange), `/api/mcp/oauth/refresh`.
+  Validates https url + our-callback redirect_uri; PKCE S256; RFC 8707
+  `resource` param. `WWW-Authenticate` parsed with a regex (the token
+  isn't at the start of the header — first test caught it).
+- `/mcp/callback` HTML page (pages router): completes the exchange and
+  `postMessage`s the token to `window.opener`, then closes.
+- Client: connector rows get **Sign in / Reconnect**; the add form has
+  **Add & sign in** (popup OAuth) beside **Add with token**. OAuth tokens
+  store `{auth:'oauth', token, refreshToken, tokenEndpoint, clientId,
+  expiresAt}` device-local; `ensureConnectorTokens()` lazily refreshes
+  expired tokens before each send; sign-out clears them.
+- Tests: `tests/test_mcp_oauth.py` (start/finish/refresh, validation,
+  callback) + `scripts/e2e_connector_oauth.py` (stubbed provider drives
+  the real popup→callback→finish→postMessage→store→request-carries-token
+  flow, plus expiry-triggers-refresh). 51 pytest; full regression green.
+
+### Live verification (deployed) — PASS
+Through prod `/api/mcp/oauth/start`: **real dynamic client registration +
+valid S256 PKCE authorize URLs against Linear AND Notion** (client_id
+issued, resource + our redirect_uri + state present); https/redirect
+validation returns 400. Cache-bust deployed; pushed `3bab9d8..52ce29f`.
+The one step needing a human is the actual authorization click at the
+provider (real account + consent) — same class as Google sign-in on the
+token portal.
+
+### PARITY: COMPLETE
+Every claude.ai subsystem AND the previously-deferred connector OAuth are
+now shipped and (as far as automation allows) live-verified. No known
+functional gaps remain. Residual micro-divergences (documented): browser
+TTS voice quality, sources numbering counts uncited results.
