@@ -1948,3 +1948,27 @@ worker's onmessage. Tool description documents `files['name.csv']`. New
 ### Note
 Images/PDFs aren't exposed to the sandbox (binary vision blocks stay on
 the model's side); only text/CSV/code attachments are readable as files[].
+
+---
+
+## 2026-07-11 (follow-up) — Polish: single-sheet xlsx extracts as clean CSV
+
+### Issue (found in audit #15 live testing)
+The `# Sheet: <name>` prefix prepended to every converted spreadsheet
+could trip up the model's parsing when reading the file via the analysis
+`files{}` object — a single-sheet prices.xlsx summed to 0.00 because the
+label line broke the parse.
+
+### Fix (commit `b3b7257`)
+Single-sheet workbooks now emit the raw `sheet_to_csv` with **no** label
+(the common case → clean, standard CSV). Multi-sheet workbooks keep the
+`# Sheet: <name>` labels since they're needed to distinguish sheets.
+
+### Verification — PASS (deployed `app.js?v=80982eda`)
+- Focused check: single-sheet xlsx → no `# Sheet:` in the sent text;
+  multi-sheet → both sheet labels present. text-attach + analysis-files
+  gates + 56 pytest green.
+- **Live re-run of the exact failing scenario**: single-sheet prices.xlsx
+  + config.json → the xlsx now rides as clean CSV (no `# Sheet:`), and the
+  model computed the taxed total = **54.00** (was 0.00 before).
+- Pushed `8713ba2..b3b7257`.
