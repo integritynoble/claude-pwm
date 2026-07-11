@@ -2383,3 +2383,33 @@ floating copy button and no language label.
 recreate race; a `docker compose up -d` retry brought up a single healthy
 container (temp-prefixed name, cosmetic). Recurring — future deploys may want
 `compose down && up` to avoid it.
+
+---
+
+## 2026-07-11 — Audit #27: Image lightbox (click to enlarge)
+
+### Gap
+claude.ai lets you click an image in a conversation to view it full-screen.
+PWM rendered attached-image thumbnails but they weren't clickable.
+
+### What was built (commit — see git log)
+- A `#lightbox` overlay (dark backdrop + close button). `messagesEl` delegates
+  clicks on `.msg-attachments img` → `openLightbox(src)`. Closes on the close
+  button, backdrop click (anything but the image), and Esc (wired first in the
+  global Escape chain). Thumbnails get `cursor: zoom-in`.
+- New `e2e_lightbox`.
+
+### Verification — PASS (deployed `app.js?v=3f846adf`)
+- `e2e_lightbox`: an attached image opens the lightbox on click (correct src),
+  Esc closes it, backdrop-click closes it. Green on a fresh server AND against
+  the **deployed prod container**. Screenshot shows an enlarged image centered
+  on a dark backdrop with the × control.
+- Regression: attach-star / text-attach / code-block / scroll-bottom / versions
+  / artifacts-library / math / mermaid / react-artifact / paste-attach /
+  thinking / auto-title / voice-mode e2e + 60 pytest all green.
+- Public `claude.comparegpt.io` serves the build.
+
+### Deploy note (race resolved)
+Switched this deploy to `compose build && compose down && compose up -d` — no
+"removal in progress" race this time, and the container kept its normal name
+(no temp hash prefix). Recommend this sequence going forward (≈1s downtime).
