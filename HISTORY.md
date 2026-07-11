@@ -2160,3 +2160,39 @@ HTML/SVG markup; a React/JSX artifact showed as code only.
 The standalone *published* artifact page (strict CSP, no external CDN) still
 renders React artifacts as code — in-app preview only. Faithful to scope; a
 future audit could bundle a React runtime into the publish path.
+
+---
+
+## 2026-07-11 — Audit #21: Published React artifacts render live
+
+### Gap (the limitation flagged in audit #20)
+Audit #20 added live React preview in the in-app artifact panel but noted the
+standalone *published* `/artifact/{id}` page still showed React as code, on the
+assumption it had a strict no-external-CDN CSP. **That assumption was wrong** —
+the published page already loads highlight.js from cdnjs and sets no CSP
+header, so its sandboxed iframe can load React/Babel/Tailwind just fine.
+
+### What was built (commit — see git log)
+- Inlined the same `looksReact()` + React runtime (`reactSrcdoc()`) into
+  `static/artifact.html` (self-contained; it's a separate page from app.js).
+  The publish render path now branches markup → iframe(code), **react →
+  iframe(reactSrcdoc)**, else → highlighted code. Babel transpiles with
+  `transform-modules-commonjs` and the same `require` shim (react, react-dom,
+  recharts, lucide-react); mounts the default export; errors show inline.
+- No server change: `/api/artifacts` already stored any `lang`, and Publish
+  already sent `{title, lang, code}`, so React artifacts published fine — only
+  the render page needed to catch up.
+
+### Verification — PASS (deployed; artifact.html updated, app.js hash unchanged)
+- New `e2e_react_publish`: publishes a `useState` counter via the real
+  `/api/artifacts` endpoint, visits `/artifact/{id}`, and asserts the
+  component **renders live and is interactive** (click 0→1) inside the
+  published shell. Green on a fresh working-tree server AND against the
+  **deployed prod container** (then the prod test row was deleted).
+- Regression: react-artifact / artifact-publish / mermaid / math / versions /
+  artifacts-library / web_search e2e + 56 pytest all green.
+- Public `claude.comparegpt.io/artifact/*` confirmed serving the React runtime.
+
+### Artifact story — now fully consistent
+inline card → in-app live preview (HTML/SVG/**React**) → versioning → publish
+→ standalone page (HTML/SVG/**React**). Both preview surfaces render the same.
