@@ -2082,3 +2082,40 @@ source (`\frac{-b \pm \sqrt{...}}{2a}`).
 ### Note
 Also added `.claude/worktrees/` to `.gitignore` (an embedded worktree
 gitlink had been swept into the staging area).
+
+---
+
+## 2026-07-11 — Audit #19: Mermaid diagram rendering
+
+### Gap
+claude.ai renders ```mermaid code blocks as actual diagrams (flowcharts,
+sequence/ER/gantt charts). PWM showed the raw mermaid source as a plain code
+block. Natural companion to audit #18's KaTeX math.
+
+### What was built (commit — see git log)
+- Vendored **mermaid 10.9.1** UMD to `static/vendor/mermaid.min.js` and
+  **lazy-loaded** it via the existing `loadVendor()` (only fetched the first
+  time a diagram appears — kept off the initial page load, like the office
+  libs).
+- New `renderMermaidBlocks(bubbleEl)`: finds `pre > code.language-mermaid`,
+  initializes mermaid once (`securityLevel:'strict'`, theme matched to the
+  app's light/dark), renders each to an inline SVG, and replaces the `<pre>`
+  with a `.mermaid-diagram` div. Invalid diagrams fall back to the code block
+  (and mermaid's error stub is cleaned up). Called from `processArtifacts`,
+  which also **skips** mermaid blocks from artifact-card conversion.
+- CSS `.mermaid-diagram` (centered, bordered, horizontal-scroll, responsive
+  SVG). Runs on both the live final render and the saved-message re-render,
+  so diagrams persist across reload.
+
+### Verification — PASS (deployed `app.js?v=81ba5aa4`)
+- New `e2e_mermaid`: a `graph TD` flowchart renders as inline SVG with the
+  right node labels, the raw ```mermaid block is gone, and the diagram
+  **re-renders after reload**. Green on a fresh working-tree server AND
+  against the **deployed prod container**. Screenshot shows the flowchart +
+  an inline `$A = \pi r^2$` KaTeX equation rendering together, claude.ai-style.
+- Regression: math / thinking / analysis-files / versions / artifacts-library
+  / web_search e2e + 56 pytest all green.
+- Public `claude.comparegpt.io` serves the build via the versioned URL
+  (`?v=81ba5aa4`); vendored mermaid.min.js reachable (200). Deterministic
+  client-side render, so the prod-container e2e exercises the exact prod path.
+- Pushed to master.
