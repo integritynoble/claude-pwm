@@ -2119,3 +2119,44 @@ block. Natural companion to audit #18's KaTeX math.
   (`?v=81ba5aa4`); vendored mermaid.min.js reachable (200). Deterministic
   client-side render, so the prod-container e2e exercises the exact prod path.
 - Pushed to master.
+
+---
+
+## 2026-07-11 — Audit #20: Live React/JSX artifact preview
+
+### Gap
+claude.ai renders React component artifacts **live** — ask for an interactive
+widget and it mounts and runs in the artifact panel. PWM previewed only
+HTML/SVG markup; a React/JSX artifact showed as code only.
+
+### What was built (commit — see git log)
+- `reactArtifactSrcdoc(code)` builds a sandboxed (`allow-scripts`, opaque
+  origin) document that **Babel-transpiles the component in-browser** with
+  `transform-modules-commonjs`, so *every* import form resolves through a
+  `require` shim (`react`, `react-dom`, `recharts`, `lucide-react`), then
+  mounts `module.exports.default`. React + Tailwind Play load from CDN; a
+  `window.onerror`/try-catch surfaces errors inline while the Code tab keeps
+  the source. `<` is `<`-escaped so no code can break out of the script.
+- Centralized artifact classification in `classifyArtifact(lang, code)` →
+  `{markup, react, preview, title}`, used by both `processArtifacts` and
+  `artifactsFromMessages`. `looksReact()` detects jsx/tsx or JS with
+  `from 'react'` / `export default` + JSX / `useState` + JSX.
+- React artifacts show the Preview|Code tabs and default to Preview. Library
+  thumbnails skip the scriptless React preview (show a code snippet instead).
+
+### Verification — PASS (deployed `app.js?v=e7c4ad61`)
+- New `e2e_react_artifact`: a `useState` counter component becomes an artifact
+  card; opening it transpiles + mounts the live component, and it's
+  **interactive** (click increments 0→1); the Code tab still shows the source.
+  Green on a fresh working-tree server AND against the **deployed prod
+  container**. Screenshot shows a Tailwind-styled component (indigo button,
+  typography) rendering in the panel, claude.ai-style.
+- Regression: mermaid / math / thinking / analysis-files / versions /
+  artifacts-library / artifact-publish / web_search e2e + 56 pytest all green.
+- Public `claude.comparegpt.io` serves the build via the versioned URL.
+- Pushed to master.
+
+### Known limitation
+The standalone *published* artifact page (strict CSP, no external CDN) still
+renders React artifacts as code — in-app preview only. Faithful to scope; a
+future audit could bundle a React runtime into the publish path.
