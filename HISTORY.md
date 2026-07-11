@@ -1917,3 +1917,34 @@ gate updated (recent timestamps → "Today").
   YESTERDAY / PREVIOUS 7 DAYS / PREVIOUS 30 DAYS / APRIL headers, each
   chat under its group. Screenshot matches claude.ai's sidebar.
 - Pushed `8b32229..3351a45`.
+
+---
+
+## 2026-07-11 — Audit #15: analysis tool reads attached files
+
+### Gap (functional; flagged in audits #10/#11)
+claude.ai's code/analysis tool can read uploaded files directly; our repl
+worker had no file access, so the model had to inline data (fails for
+large files).
+
+### What was built (commit `8713ba2`)
+Text/CSV/code files attached in the conversation are passed to the repl
+worker as the `files` object ({name: content}) via postMessage (structured
+clone — isolated to the sandbox). `collectAttachedFiles()` gathers the
+conversation's `file_text` blocks; the loop passes them to
+`runAnalysisCode(code, timeout, inputFiles)`; `self.files` is set in the
+worker's onmessage. Tool description documents `files['name.csv']`. New
+`e2e_analysis_files` gate (worker sums a column read from files['data.csv']
+→ 980).
+
+### Verification — PASS (deployed `app.js?v=1e4d04c1`)
+- Gate green on prod build; analysis + file-creation + text-attach
+  regression green.
+- **Live**: attached a 50-row numbers.csv; the REAL model wrote repl code
+  using `files[…]`, the worker read the file and computed the column sum
+  = **2325** (correct); reply "2325". Screenshot captured.
+- Pushed `3351a45..8713ba2`.
+
+### Note
+Images/PDFs aren't exposed to the sandbox (binary vision blocks stay on
+the model's side); only text/CSV/code attachments are readable as files[].
