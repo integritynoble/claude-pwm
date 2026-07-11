@@ -2234,3 +2234,35 @@ Loaded only from CDN in the sandboxed preview iframe (opaque origin), so no
 impact on the main app or its CSP-free published page. lucide icons render as
 neutral placeholders; a future audit could vendor a lucide UMD/ESM shim for
 real glyphs.
+
+---
+
+## 2026-07-11 — Audit #23: Large paste → "Pasted content" attachment
+
+### Gap
+On claude.ai, pasting a big block of text into the composer becomes a "Pasted
+content" attachment chip rather than flooding the textarea. PWM's paste handler
+only caught files (images) — large text dumped straight into the composer.
+
+### What was built (commit — see git log)
+- The document paste handler now, when a paste carries **no files** and lands
+  **in the composer**, converts a large text paste (`>1800` chars or `>40`
+  lines) into a `Pasted content.txt` file and routes it through the existing
+  `addAttachFiles()` text pipeline → a `{kind:'text'}` attachment chip that
+  rides to the model as a file block. Multiple pastes get numbered names.
+- Scoped carefully: only when `document.activeElement`/`e.target` is the
+  composer (won't hijack pastes into the search box, project fields, etc.),
+  and only if under the `MAX_FILES` cap. Small pastes fall through to normal
+  textarea insertion.
+
+### Verification — PASS (deployed `app.js?v=bc8f4b44`)
+- New `e2e_paste_attach` (4 checks): big paste → "Pasted content" chip +
+  composer stays empty; small paste → no chip; big paste into the **search
+  box** is ignored; on send the pasted text rides as a file block (`line 59`
+  present). Green on a fresh server AND against the **deployed prod
+  container**. Screenshot shows the `Pasted content.txt` chip above a clean
+  composer, claude.ai-style.
+- Regression: text-attach / attach-star / recharts / react-artifact / mermaid
+  / math / versions / web_search e2e + 56 pytest all green.
+- Public `claude.comparegpt.io` serves the build.
+- Pushed to master.
