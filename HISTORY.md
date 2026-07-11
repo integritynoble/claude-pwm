@@ -1895,3 +1895,25 @@ Escape-restores checks.
 ### Artifact experience — complete
 create → iterate (version history) → view any version → preview live →
 **expand fullscreen** → publish to a shareable URL.
+
+---
+
+## 2026-07-11 — Audit #14: date-grouped recents in the sidebar
+
+### Gap
+claude.ai groups recent chats by date (Today / Yesterday / Previous 7
+Days / …). Ours was a flat "Recents" list.
+
+### What was built (commit `3351a45`)
+`dateBucket(updatedAt)` → Today / Yesterday / Previous 7 Days / Previous
+30 Days / month (or month+year for prior years). loadConversations sorts
+recents by recency and inserts a group label when the bucket changes;
+Starred stays pinned on top. New `e2e_date_groups` gate; `attach_star`
+gate updated (recent timestamps → "Today").
+
+### Verification — PASS (deployed `app.js?v=f2ef9cfc`)
+- Gate green on prod build; 56 pytest; regression green.
+- **Live**: seeded 5 chats across buckets → sidebar shows TODAY /
+  YESTERDAY / PREVIOUS 7 DAYS / PREVIOUS 30 DAYS / APRIL headers, each
+  chat under its group. Screenshot matches claude.ai's sidebar.
+- Pushed `8b32229..3351a45`.
