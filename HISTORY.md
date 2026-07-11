@@ -2307,3 +2307,45 @@ server-side too) and leaves the existing tests untouched.
   exchange allowlists it → the live title call works; failure degrades
   gracefully to the fallback title.
 - Pushed to master.
+
+---
+
+## 2026-07-11 — Audit #25: Scroll-to-bottom button + scroll-aware streaming
+
+### Gap
+claude.ai shows a floating "jump to latest" button when you scroll up, and it
+only auto-scrolls during streaming while you're pinned to the bottom. PWM had
+no jump button and force-scrolled to the bottom on *every* streaming delta —
+so scrolling up mid-response yanked you back down.
+
+### What was built (commit — see git log)
+- Floating `#scroll-bottom-btn` (down chevron) above the composer: appears
+  when `#messages` is scrolled up, hides near the bottom, click → smooth scroll
+  to latest.
+- `stickToBottom` state + `maybeAutoScroll()` replace the 6 unconditional
+  `scrollTop = scrollHeight` calls: streaming auto-scrolls only while pinned;
+  a message-list `scroll` listener updates the flag + button. Sending a message
+  re-pins.
+- `loadChat` opens a chat pinned to the latest — **after** removing
+  `#conversation.empty` (which `display:none`s `#messages`), else the scroll
+  ran against a hidden 0-height element.
+- Removed the blanket `scroll-behavior:smooth` on `#messages`: it animated the
+  auto-scroll, and the intermediate scroll events flipped `stickToBottom` off
+  mid-render. Auto-scroll is now instant; the button click opts into smooth.
+- New `e2e_scroll_bottom`.
+
+### Two bugs caught during e2e (worth noting)
+1. Chat opened at the *top* — the pin-scroll ran while `#messages` was still
+   `display:none` (empty class not yet removed). Fixed by reordering.
+2. The button never appeared on scroll-up — CSS smooth-scroll fired
+   intermediate scroll events that reset the stick flag. Fixed by dropping the
+   blanket smooth.
+
+### Verification — PASS (deployed `app.js?v=7746745c`)
+- `e2e_scroll_bottom` (hidden at bottom → shows scrolled up → click jumps to
+  latest + hides) green on a fresh server AND against the **deployed prod
+  container**. Screenshot shows the circular button above the composer.
+- Full regression: **all 28 e2e + 60 pytest** green (streaming/render paths —
+  thinking, math, mermaid, versions, analysis, continue, research — unaffected).
+- Public `claude.comparegpt.io` serves the build.
+- Pushed to master.
