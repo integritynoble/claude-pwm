@@ -2036,3 +2036,49 @@ text, and lost the block entirely after reload.
   text **persisted across a full reload**. Screenshot matches claude.ai's
   thinking display.
 - Pushed `0ceb2d2..66eeb3a`.
+
+---
+
+## 2026-07-11 — Audit #18: LaTeX math rendering (KaTeX)
+
+### Gap
+claude.ai typesets math — ask for the quadratic formula or an integral and it
+renders `$...$` / `$$...$$` beautifully. PWM piped replies straight through
+`marked` + `highlight.js` with **no math layer**, so LaTeX showed as raw
+source (`\frac{-b \pm \sqrt{...}}{2a}`).
+
+### What was built (commit `1e13545`)
+- Loaded **KaTeX 0.16.11** (CSS + JS) from cdnjs, alongside the existing
+  marked/hljs CDN scripts.
+- New `renderRich(src)` replaces `marked.parse` at the finalize + saved-render
+  sites. It:
+  1. shields fenced/inline code so a `$` inside code is never math;
+  2. extracts all four delimiter forms — `$$…$$`, `\[…\]`, `\(…\)`, `$…$` —
+     into KaTeX-rendered HTML placeholders **before** markdown, so markdown
+     can't mangle `_`/`*`/`\` inside equations (the classic `$a_1$ and $b_2$`
+     cross-emphasis bug) and can't strip `\(`/`\[` backslashes;
+  3. runs marked, then swaps the placeholders back in.
+  The inline `$…$` matcher rejects currency (`$5 and $10` stays literal) via
+  open/close lookarounds. Falls back to plain `marked.parse` if KaTeX is
+  absent. Streaming deltas stay on plain `marked.parse` (raw LaTeX flashes
+  briefly); the final render typesets — cheap and flicker-free.
+- New `e2e_math` gate.
+
+### Verification — PASS (deployed `app.js?v=ee581d0f`)
+- `e2e_math`: inline formula, `$a_1$`/`$a_2$` subscripts, `$$E=mc^2$$`
+  display, a code block with `$5`, and prose `$5 and $10` — asserts ≥4 KaTeX
+  spans + ≥1 `.katex-display`, code/currency stay literal, and the typeset
+  math **persists across reload**. Green on a fresh working-tree server AND
+  against the **deployed prod container** (real cdnjs KaTeX).
+- Regression: thinking / analysis-files / versions / artifacts-library /
+  web_search / date_groups e2e + 56 pytest all green.
+- Public site confirmed serving the build: `claude.comparegpt.io` returns
+  `app.js?v=ee581d0f` + katex.min (CF cache-busted by the new hash); KaTeX
+  CDN asset reachable (200). Math is a deterministic client-side render over
+  already-received text, so the prod-container e2e exercises the exact
+  production path.
+- Pushed `66eeb3a..1e13545`.
+
+### Note
+Also added `.claude/worktrees/` to `.gitignore` (an embedded worktree
+gitlink had been swept into the staging area).
