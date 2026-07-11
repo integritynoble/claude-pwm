@@ -2349,3 +2349,37 @@ so scrolling up mid-response yanked you back down.
   thinking, math, mermaid, versions, analysis, continue, research — unaffected).
 - Public `claude.comparegpt.io` serves the build.
 - Pushed to master.
+
+---
+
+## 2026-07-11 — Audit #26: Code-block language header bar
+
+### Gap
+claude.ai renders every inline code block inside a bar showing the language
+name (e.g. "Python") with a Copy button on the right. PWM had only a hover-only
+floating copy button and no language label.
+
+### What was built (commit — see git log)
+- `addCodeCopyButtons` now wraps each `<pre>` in a `.code-block` with a
+  `.code-block-head` — language name (via `LANG_NAME`, falling back to the raw
+  fence lang or "text") on the left, Copy button on the right — over a cohesive
+  dark code surface (header is a subtle lighter overlay, matching claude.ai).
+  Analysis-tool code panes (`.analysis-code` / `.analysis-block`) are excluded.
+- Runs on both the live final render and saved re-render, so headers persist.
+
+### Verification — PASS (deployed `app.js?v=7ffa4438`)
+- New `e2e_code_block`: an inline `python` snippet gets a `.code-block` with
+  `.code-lang` = "Python" and a header Copy button; persists across reload.
+  Green on a fresh server AND against the **deployed prod container**.
+  Screenshot shows Python + JavaScript blocks with header bars, claude.ai-style.
+- Regression: analysis (code pane correctly untouched) / analysis-files / math
+  / mermaid / react-artifact / versions / thinking / scroll-bottom / auto-title
+  / file-creation / research e2e + 60 pytest all green.
+- Public `claude.comparegpt.io` serves the build.
+- Pushed to master.
+
+### Deploy note
+`docker compose up -d --build` again hit the "removal already in progress"
+recreate race; a `docker compose up -d` retry brought up a single healthy
+container (temp-prefixed name, cosmetic). Recurring — future deploys may want
+`compose down && up` to avoid it.
