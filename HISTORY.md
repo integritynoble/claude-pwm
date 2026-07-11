@@ -2266,3 +2266,44 @@ only caught files (images) — large text dumped straight into the composer.
   / math / versions / web_search e2e + 56 pytest all green.
 - Public `claude.comparegpt.io` serves the build.
 - Pushed to master.
+
+---
+
+## 2026-07-11 — Audit #24: Model-generated conversation titles
+
+### Gap
+claude.ai titles a conversation with a concise model-written summary (e.g.
+"Python CSV parsing help"). PWM used the raw first user message truncated to
+48 chars as the sidebar title.
+
+### What was built (commit — see git log)
+- New backend **`POST /api/chat/title`**: a one-off, **non-streaming** call on
+  `claude-haiku-4-5` (cheap/fast) with the same identity+persona system as
+  chat_stream (so the subscription exchange doesn't 429), `max_tokens:24`,
+  returns `{title}`. Deliberately a separate endpoint — **not** on
+  `/api/chat/stream` — so title generation never perturbs the main chat flow
+  (this also kept all body-inspecting e2e tests unaffected).
+- Client: after the first exchange, `maybeAutoTitle()` fires once per chat
+  (guarded by an in-session set + `customTitle`), calls the endpoint, and
+  `applyAutoTitle()` sets the title + marks it `customTitle` (sticky through
+  save/reload/sync). A user rename always wins; failure falls back silently to
+  the first-message title.
+- New `e2e_auto_title` (stubs the endpoint → sidebar title updates + persists)
+  and `test_chat_title` (4 backend tests: happy path shape, 401, 400, 502).
+
+### Why a dedicated endpoint (design note)
+First implemented as an extra `/api/chat/stream` call — but that added a
+second request after every first reply, breaking ~5 e2e tests that count/inspect
+stream requests (analysis, analysis_files, versions, paste_attach…). Moving it
+to its own non-streaming endpoint is both cleaner (claude.ai titles
+server-side too) and leaves the existing tests untouched.
+
+### Verification — PASS (deployed `app.js?v=94040e80`)
+- `e2e_auto_title` green on a fresh server AND against the **deployed prod
+  container**; endpoint returns 401 without a key on prod + public.
+- Full regression: **all 27 e2e + 60 pytest** green (the 4 previously-affected
+  suites pass again now that the call is off the stream).
+- `claude-haiku-4-5` is already a user-selectable model (picker), so the
+  exchange allowlists it → the live title call works; failure degrades
+  gracefully to the fallback title.
+- Pushed to master.
