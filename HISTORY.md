@@ -1972,3 +1972,34 @@ Single-sheet workbooks now emit the raw `sheet_to_csv` with **no** label
   + config.json → the xlsx now rides as clean CSV (no `# Sheet:`), and the
   model computed the taxed total = **54.00** (was 0.00 before).
 - Pushed `8713ba2..b3b7257`.
+
+---
+
+## 2026-07-11 — Audit #16: Artifacts library
+
+### Gap
+claude.ai has an "Artifacts" sidebar nav item — a gallery of every artifact
+you've created across conversations. We had artifacts inline only.
+
+### What was built (commit `0ceb2d2`)
+Sidebar **Artifacts** button → `#/artifacts` grid. `collectAllArtifacts()`
+scans all saved conversations (reusing `artifactsFromMessages`, refactored
+out of collectArtifacts), one card per distinct artifact (latest version
+per lang+title signature), newest conversation first. Cards show a live
+sandboxed HTML preview thumbnail (scripts off) or a code snippet, with the
+source conversation + relative time; click → `goToChat()` + `loadChat()` +
+`openArtifact()` (opens the conversation and the panel at the latest
+version). Mirrors the Projects view/routing. New `e2e_artifacts_library`
+gate.
+
+### Verification — PASS (deployed `app.js?v=8c0df321`)
+- Gate green on prod build; projects/artifact-versions/date-groups
+  regression + 56 pytest + mobile sweep green.
+- **Live**: real model built HTML artifacts in two chats; the library
+  showed 2 cards with preview thumbnails + source titles; clicking one
+  restored its conversation and opened the artifact panel. Screenshot
+  matches claude.ai's Artifacts gallery.
+- Pushed `b3b7257..0ceb2d2`.
+
+### Artifact suite — complete
+inline cards → versioning → publish → expand → **library/gallery**.
