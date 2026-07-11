@@ -1835,3 +1835,36 @@ XML entities unescaped. Stored as a text attachment (named chip,
 
 ### Attachment parity now complete
 images, PDF, text/code/csv/json/yaml/xml/svg, xlsx/xls, **docx, pptx**.
+
+---
+
+## 2026-07-11 — Audit #12: publish an artifact to a standalone URL
+
+### Gap
+claude.ai can publish an artifact to a public shareable page (claude.site
+equivalent). We had conversation sharing but not single-artifact
+publishing — a natural complement to the artifact versioning from audit #9.
+
+### What was built (commit `daee316`)
+- `routers/artifacts.py`: `published_artifacts` table; `POST /api/artifacts`
+  (key-gated, ≤1MB) → id; `GET /api/artifacts/{id}` → JSON; `GET
+  /artifact/{id}` serves a standalone page.
+- `static/artifact.html`: renders markup artifacts in a **sandboxed iframe**
+  (`allow-scripts allow-popups allow-forms allow-modals`, **no
+  allow-same-origin** — a published page runs its own JS but can't reach
+  this origin's cookies/storage) and code artifacts as highlighted source;
+  Claude header + "Start your own chat" CTA + friendly not-found.
+- Artifact panel gains a **Publish** button → POSTs the current artifact,
+  copies the `/artifact/{id}` link, confirms via a new bottom toast
+  (`showToast`).
+- 5 backend pytest + `scripts/e2e_artifact_publish.py` (publish → real link
+  → sandboxed render + attribute check → 404 path).
+
+### Verification — PASS (deployed `app.js?v=737afcfa`)
+- Gate green on prod build; 56 pytest; regression green.
+- **Live**: real model built an interactive HTML artifact (button + JS);
+  Publish produced `…/artifact/1DxcMmzqIqiW`; visiting it in a fresh
+  keyless context rendered the page, and clicking its button ran the
+  artifact's own JS to show "LIVE_PUBLISH_TAMARIND". Screenshot captured.
+  Sandbox verified to exclude allow-same-origin.
+- Pushed `50bf892..daee316`.
