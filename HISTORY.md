@@ -2413,3 +2413,42 @@ PWM rendered attached-image thumbnails but they weren't clickable.
 Switched this deploy to `compose build && compose down && compose up -d` — no
 "removal in progress" race this time, and the container kept its normal name
 (no temp hash prefix). Recommend this sequence going forward (≈1s downtime).
+
+---
+
+## 2026-07-11 — Audit #28: Real lucide-react icons in React artifacts
+
+### Gap
+Audit #22 left lucide-react icons as neutral placeholders (no UMD build on any
+CDN). Icon-heavy claude.ai React artifacts (dashboards, cards) therefore
+rendered empty boxes where icons should be — the last visible gap in the React
+artifact runtime.
+
+### What was built (commit — see git log)
+- Vendored the **vanilla `lucide` UMD** (0.400.0, 1652 icons) to
+  `static/vendor/lucide.min.js` (its icon data is `["svg", attrs, children]`).
+- The React runtime (in-app `reactArtifactSrcdoc` + published `reactSrcdoc`)
+  loads it **only when the artifact imports lucide-react** (same on-demand
+  pattern as recharts), from `location.origin` so it works on localhost + prod.
+- The `lucide-react` require shim is now a `Proxy` that builds a real React
+  icon component per name from the lucide node: kebab SVG attrs camelCased,
+  and `size`→width/height, `color`→stroke, plus generic prop pass-through
+  (className/id/style/onClick/aria…). Unknown names fall back to a tiny
+  placeholder. Loaded in the sandboxed iframe only (no main-app impact).
+- New `e2e_lucide`.
+
+### Verification — PASS (deployed `app.js?v=bfc5bfaf`)
+- `e2e_lucide`: a component importing `TrendingUp`/`Camera` renders real
+  `<svg>` glyphs — `TrendingUp` has its 2 `polyline` children, `size={32}` →
+  width 32, `color="green"` → stroke green; no runtime error. Green on a fresh
+  server AND against the **deployed prod container**. Screenshot: a stat-card
+  dashboard with real DollarSign/Users/TrendingUp/Activity icons + Tailwind,
+  indistinguishable from a claude.ai artifact.
+- Regression: recharts / react-artifact / react-publish / artifact-publish /
+  code-block / lightbox / scroll-bottom / math / mermaid / versions / thinking
+  / auto-title / paste-attach / analysis / web_search e2e + 60 pytest all green.
+- Public `claude.comparegpt.io` serves app.js + the vendored lucide (200).
+
+### React artifact runtime — now complete
+React + hooks + TypeScript + Tailwind + **recharts** + **lucide-react**, in
+both the in-app preview and the published page.
