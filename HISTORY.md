@@ -2196,3 +2196,41 @@ header, so its sandboxed iframe can load React/Babel/Tailwind just fine.
 ### Artifact story — now fully consistent
 inline card → in-app live preview (HTML/SVG/**React**) → versioning → publish
 → standalone page (HTML/SVG/**React**). Both preview surfaces render the same.
+
+---
+
+## 2026-07-11 — Audit #22: React artifacts support recharts + graceful lucide
+
+### Gap
+Audits #20/#21 shipped live React previews, but the `require` shim referenced
+`recharts`/`lucide-react` without ever loading them — so the *most common*
+claude.ai React artifacts (charts, dashboards, icon-laden UIs) errored out.
+
+### What was built (commit — see git log)
+- The React runtime (shared logic in `app.js` `reactArtifactSrcdoc` and
+  `artifact.html` `reactSrcdoc`) now builds its CDN `<script>` list
+  **conditionally**: recharts 2.12.7 (+ its `prop-types` peer) are added only
+  when the artifact's code references `recharts`, keeping plain components
+  lean. The `require` shim maps `recharts`→`window.Recharts`,
+  `prop-types`→`window.PropTypes`.
+- **lucide-react** has no UMD build (not on cdnjs), so rather than crash an
+  icon-using artifact, the shim returns a `Proxy` that yields a placeholder
+  `<svg>` component for any icon name. The rest of the component still renders.
+
+### Verification — PASS (deployed `app.js?v=105e39c2`)
+- New `e2e_recharts`: a component importing `LineChart`/`Line`/axes from
+  recharts renders a real `.recharts-surface` with a plotted `.recharts-line`;
+  a `lucide-react` `TrendingUp` import degrades to a placeholder (header still
+  renders, no `#err`). Green on a fresh server AND against the **deployed prod
+  container**. Screenshot: a full recharts bar-chart "Revenue Dashboard"
+  (axes, grid, rounded bars, ResponsiveContainer) — claude.ai-style.
+- Regression: react-artifact / react-publish / artifact-publish / mermaid /
+  math / versions / artifacts-library / web_search e2e + 56 pytest all green.
+- Public `claude.comparegpt.io` serves recharts in both app.js and artifact.html.
+- Pushed to master.
+
+### Note
+Loaded only from CDN in the sandboxed preview iframe (opaque origin), so no
+impact on the main app or its CSP-free published page. lucide icons render as
+neutral placeholders; a future audit could vendor a lucide UMD/ESM shim for
+real glyphs.
