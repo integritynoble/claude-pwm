@@ -1868,3 +1868,30 @@ publishing — a natural complement to the artifact versioning from audit #9.
   artifact's own JS to show "LIVE_PUBLISH_TAMARIND". Screenshot captured.
   Sandbox verified to exclude allow-same-origin.
 - Pushed `50bf892..daee316`.
+
+---
+
+## 2026-07-11 — Audit #13: artifact expand / fullscreen toggle
+
+### Gap
+claude.ai lets you expand the artifact panel to fill the window (for
+previewing a page or reading long code). Ours was fixed-width.
+
+### What was built (commit `8b32229`)
+Artifact panel gains an **Expand** button: `#app.artifact-expanded` sets
+the panel to 100% width and hides `#main` (the chat column). Toggles to
+Restore (icon + title + aria-pressed flip); Escape restores from expanded
+before closing the panel; closing resets the button. CSS-driven, no layout
+math. e2e (artifact-versions gate) extended with the expand → chat-hidden →
+Escape-restores checks.
+
+### Verification — PASS (deployed `app.js?v=893fce27`)
+- Gates green on prod build; 56 pytest; mobile sweep green.
+- **Live**: panel width 680 → **1400** (full window) with the chat hidden;
+  Restore returned it to 680. Screenshot shows the artifact filling the
+  window.
+- Pushed `daee316..8b32229`.
+
+### Artifact experience — complete
+create → iterate (version history) → view any version → preview live →
+**expand fullscreen** → publish to a shareable URL.
