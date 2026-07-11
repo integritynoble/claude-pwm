@@ -2003,3 +2003,36 @@ gate.
 
 ### Artifact suite — complete
 inline cards → versioning → publish → expand → **library/gallery**.
+
+---
+
+## 2026-07-11 — Audit #17: Extended thinking shows "Thought for Ns"
+
+### Gap
+claude.ai renders extended thinking as a collapsible **"Thought for Ns"**
+block above the reply — you can expand it to read the reasoning, and it
+stays on the message (re-renders on reload). We streamed thinking deltas
+into a live block but never captured the duration, never persisted the
+text, and lost the block entirely after reload.
+
+### What was built (commit `66eeb3a`)
+- `ensureThinkingBlock` stamps `startedAt` and resets the accumulator;
+  `thinking_delta` now appends into `thinkingState.text`.
+- `collapseThinking` computes elapsed seconds and sets the header via a new
+  `thoughtLabel(seconds)` → "Thought for Ns" (or "…less than a second").
+- The finished assistant message carries `thinking: { text, seconds }`;
+  `stripForStorage` preserves it so it survives save/reload.
+- `renderSavedThinking()` rebuilds the collapsed block from stored data;
+  `appendMessage` calls it when re-rendering assistant turns.
+- New `e2e_thinking` gate: stubbed thinking SSE → asserts the "Thought for"
+  label, the captured reasoning text, the reply, and reload persistence.
+
+### Verification — PASS (deployed `app.js?v=2d54b43a`)
+- `e2e_thinking` green on prod build; analysis-files / artifact-versions /
+  web_search e2e + 56 pytest + mobile sweep all green before deploy.
+- **Live** (real Fable 5, Think on, bat-and-ball prompt): a "Thought for…"
+  collapsible rendered above the reply, expanding to the model's reasoning;
+  the reply worked the problem to **5 cents** correctly; the block and its
+  text **persisted across a full reload**. Screenshot matches claude.ai's
+  thinking display.
+- Pushed `0ceb2d2..66eeb3a`.
